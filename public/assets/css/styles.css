@@ -33,7 +33,6 @@ body.light-theme {
     --text: #1e293b;
     --text-muted: #64748b;
 }
-}
 
 body {
     margin: 0;
@@ -745,7 +744,8 @@ select.field {
     background: none;
     border: 1px solid var(--border-dark);
     color: var(--text);
-    width: 40px;
+    min-width: 40px;
+    padding: 0 12px;
     height: 40px;
     border-radius: 8px;
     cursor: pointer;

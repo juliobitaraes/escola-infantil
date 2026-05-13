@@ -2,6 +2,7 @@ const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https")
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
+const SUPERUSER_EMAIL = "julio.bitaraes.mail@gmail.com";
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -10,10 +11,24 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-async function getUserRole(uid) {
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isSuperUserEmail(email) {
+  return normalizeEmail(email) === SUPERUSER_EMAIL;
+}
+
+async function getUserContext(uid, email) {
   const snap = await db.collection("usuarios").doc(uid).get();
-  if (!snap.exists) return null;
-  return snap.get("role") || null;
+  const data = snap.exists ? snap.data() : {};
+  const superuser = isSuperUserEmail(email || data.email);
+  return {
+    role: superuser ? "superadmin" : (data.role || null),
+    escolaId: data.escola_id || null,
+    email: email || data.email || null,
+    superuser
+  };
 }
 
 function requireAuth(request) {
@@ -22,19 +37,20 @@ function requireAuth(request) {
   }
 }
 
-function requireFinanceRole(role) {
-  const allowed = ["admin", "direcao", "financeiro"];
-  if (!allowed.includes(role)) {
+function requireFinanceRole(context) {
+  const allowed = ["superadmin", "admin", "direcao", "financeiro"];
+  if (!allowed.includes(context.role || "")) {
     throw new HttpsError("permission-denied", "Sem permissao para operacao financeira.");
   }
 }
 
-async function writeAudit({ action, area, uid, email, details }) {
+async function writeAudit({ action, area, uid, email, details, escolaId }) {
   await db.collection("auditoria").add({
     action,
     area,
     user_uid: uid || null,
     user_email: email || null,
+    escola_id: escolaId || null,
     details: details || null,
     created_at: admin.firestore.FieldValue.serverTimestamp()
   });
@@ -67,8 +83,8 @@ async function criarCobrancaAsaas(payload) {
 
 exports.criarCobrancaExterna = onCall({ region: "southamerica-east1" }, async (request) => {
   requireAuth(request);
-  const role = await getUserRole(request.auth.uid);
-  requireFinanceRole(role);
+  const context = await getUserContext(request.auth.uid, request.auth.token && request.auth.token.email);
+  requireFinanceRole(context);
 
   const { cobrancaId, customerRef, description } = request.data || {};
   if (!cobrancaId || !customerRef) {
@@ -82,6 +98,14 @@ exports.criarCobrancaExterna = onCall({ region: "southamerica-east1" }, async (r
   }
 
   const cobranca = cobrancaSnap.data();
+  if (!context.superuser) {
+    if (!context.escolaId) {
+      throw new HttpsError("failed-precondition", "Usuario sem escola vinculada.");
+    }
+    if (cobranca.escola_id && cobranca.escola_id !== context.escolaId) {
+      throw new HttpsError("permission-denied", "Cobranca pertence a outra escola.");
+    }
+  }
   const provider = process.env.BILLING_PROVIDER || "asaas";
 
   let external = null;
@@ -114,6 +138,7 @@ exports.criarCobrancaExterna = onCall({ region: "southamerica-east1" }, async (r
     area: "cobranca_externa",
     uid: request.auth.uid,
     email: request.auth.token && request.auth.token.email,
+    escolaId: cobranca.escola_id || context.escolaId || null,
     details: { cobrancaId, provider }
   });
 
@@ -187,6 +212,7 @@ exports.processarReguaCobranca = onSchedule(
       await writeAudit({
         action: "process",
         area: "regua_cobranca",
+        escolaId: row.escola_id || null,
         details: { id: docSnap.id, resultado: noti }
       });
     }
@@ -219,6 +245,7 @@ exports.receberWebhookCobranca = onRequest({ region: "southamerica-east1" }, asy
   }
 
   const cobrancaRef = snap.docs[0].ref;
+  const cobrancaData = snap.docs[0].data();
   await cobrancaRef.set(
     {
       external_status: status,
@@ -232,6 +259,7 @@ exports.receberWebhookCobranca = onRequest({ region: "southamerica-east1" }, asy
   await writeAudit({
     action: "webhook",
     area: "cobrancas",
+    escolaId: cobrancaData.escola_id || null,
     details: { externalId, status }
   });
 

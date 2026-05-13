@@ -10,7 +10,7 @@
     <div id="login-screen">
         <div class="login-box">
             <h1>Portal da Escola</h1>
-            <p>Acesse para operar o painel financeiro.</p>
+            <p>Acesse para operar todos os modulos.</p>
             <input class="field" type="email" id="email" placeholder="E-mail" required>
             <input class="field" type="password" id="password" placeholder="Senha" required>
             <button class="btn" id="btnLogin" style="width: 100%;">Entrar</button>
@@ -25,10 +25,40 @@
             </div>
             <nav class="sidebar-nav">
                 <div class="nav-section">
-                    <label class="nav-section-label">ACESSO RÁPIDO</label>
-                    <a href="#" class="nav-item active" aria-current="page">
-                        <span class="nav-icon">📊</span> Dashboard
-                    </a>
+                    <label class="nav-section-label">COMUNICACAO</label>
+                    <a href="#" class="nav-item active" data-section="agenda">📅 Agenda Digital</a>
+                    <a href="#" class="nav-item" data-section="mural">📢 Mural</a>
+                    <a href="#" class="nav-item" data-section="chat">💬 Chat</a>
+                    <a href="#" class="nav-item" data-section="galeria">📸 Galeria</a>
+                    <a href="#" class="nav-item" data-section="autorizacoes">✅ Autorizacoes</a>
+                </div>
+                <div class="nav-section">
+                    <label class="nav-section-label">PEDAGOGICO</label>
+                    <a href="#" class="nav-item" data-section="bncc">📋 BNCC</a>
+                    <a href="#" class="nav-item" data-section="planejamento">📝 Planejamento</a>
+                    <a href="#" class="nav-item" data-section="anamnese">🩺 Anamnese</a>
+                    <a href="#" class="nav-item" data-section="ocorrencias">⚠️ Ocorrencias</a>
+                    <a href="#" class="nav-item" data-section="frequencia">✏️ Frequencia</a>
+                </div>
+                <div class="nav-section">
+                    <label class="nav-section-label">FINANCEIRO</label>
+                    <a href="#" class="nav-item" data-section="cobrancas">💰 Cobrancas</a>
+                    <a href="#" class="nav-item" data-section="regua">📈 Regua</a>
+                    <a href="#" class="nav-item" data-section="extras">➕ Extras</a>
+                    <a href="#" class="nav-item" data-section="caixa">💼 Fluxo Caixa</a>
+                </div>
+                <div class="nav-section">
+                    <label class="nav-section-label">ADMINISTRATIVO</label>
+                    <a href="#" class="nav-item" data-section="matriculas">📚 Matriculas</a>
+                    <a href="#" class="nav-item" data-section="alunos">👤 Alunos</a>
+                    <a href="#" class="nav-item" data-section="prontuarios">📁 Prontuarios</a>
+                    <a href="#" class="nav-item" data-section="usuarios">👥 Usuarios</a>
+                    <a href="#" class="nav-item" data-section="turmas">🏫 Turmas</a>
+                </div>
+                <div class="nav-section">
+                    <label class="nav-section-label">SEGURANCA</label>
+                    <a href="#" class="nav-item" data-section="portaria">🚪 Portaria</a>
+                    <a href="#" class="nav-item" data-section="lgpd">🔐 LGPD</a>
                 </div>
             </nav>
             <div class="sidebar-footer">
@@ -42,20 +72,391 @@
 
         <main class="main-content">
             <header class="top-header">
-                <h1>Painel Financeiro</h1>
+                <h1 id="sectionTitle">Modulos</h1>
+                <div class="header-actions">
+                    <button id="themeToggle" class="theme-toggle" title="Alternar tema">🌙</button>
+                    <button id="helpBtn" class="help-button" title="Abrir manual">📚 Manual</button>
+                    <span id="dateTime" class="date-time"></span>
+                </div>
             </header>
 
             <div class="container">
-                <div class="summary" style="max-width:560px;margin:0 auto;">
-                    <div class="kpi">
-                        <span id="kpiCobrancas">Inadimplencia: 0</span>
-                        <span id="kpiCaixa">Saldo caixa: R$ 0,00</span>
-                    </div>
+                <div class="grid" id="mainGrid">
+                    <section class="card">
+                        <div class="card-head" style="background:#f2994a;">Comunicacao - Agenda Digital</div>
+                        <div class="card-body">
+                            <div class="agenda-toolbar">
+                                <span class="tag" id="agendaModeTag">Modo escola</span>
+                                <span class="tag tag-warn" id="agendaSelectedStatus">Nenhuma agenda selecionada</span>
+                            </div>
+                            <input id="agendaAluno" class="field" placeholder="Aluno">
+                            <div class="row">
+                                <input id="agendaTurma" class="field" placeholder="Turma">
+                                <input id="agendaData" class="field" type="date">
+                            </div>
+                            <div class="row">
+                                <input id="agendaResponsavelUid" class="field" placeholder="UID do responsavel" readonly>
+                                <select id="agendaStatus" class="field">
+                                    <option value="rascunho">Rascunho</option>
+                                    <option value="enviado">Enviado</option>
+                                    <option value="corrigido">Corrigido</option>
+                                </select>
+                            </div>
+                            <div class="agenda-block school-only">
+                                <h4>Rotina do dia</h4>
+                                <div class="row">
+                                    <select id="agendaAlimentacao" class="field"><option>Comeu tudo</option><option>Comeu pouco</option><option>Nao comeu</option></select>
+                                    <input id="agendaAlimentacaoObs" class="field" placeholder="Observacao alimentacao">
+                                </div>
+                                <div class="row">
+                                    <input id="agendaSonoInicio" class="field" type="time">
+                                    <input id="agendaSonoFim" class="field" type="time">
+                                </div>
+                                <div class="row">
+                                    <select id="agendaSonoQualidade" class="field"><option>Dormiu bem</option><option>Sono leve</option><option>Nao dormiu</option></select>
+                                    <select id="agendaHumor" class="field"><option>Tranquilo</option><option>Agitado</option><option>Sonolento</option><option>Choroso</option></select>
+                                </div>
+                                <div class="row">
+                                    <input id="agendaEvacuacao" class="field" placeholder="Evacuacao">
+                                    <input id="agendaBanho" class="field" placeholder="Banho e higiene">
+                                </div>
+                                <div class="row">
+                                    <input id="agendaSaude" class="field" placeholder="Saude rapida">
+                                    <input id="agendaAtividades" class="field" placeholder="Atividades e participacao">
+                                </div>
+                            </div>
+                            <div class="agenda-block school-only">
+                                <h4>Observacoes da escola</h4>
+                                <textarea id="agendaDestaque" class="field" rows="2" placeholder="Destaque positivo"></textarea>
+                                <textarea id="agendaAtencao" class="field" rows="2" placeholder="Ponto de atencao"></textarea>
+                                <textarea id="agendaRecadoEscola" class="field" rows="3" placeholder="Recado da escola"></textarea>
+                            </div>
+                            <div class="agenda-actions school-only">
+                                <button class="btn" id="btnAgenda">Salvar agenda</button>
+                                <button class="btn btn-secondary" id="btnAgendaCopiar">Copiar rotina base</button>
+                                <button class="btn btn-secondary" id="btnAgendaEnviar">Marcar como enviada</button>
+                            </div>
+                            <p class="ok" id="okAgenda">Agenda salva.</p>
+                            <div class="agenda-block family-only">
+                                <h4>Painel da familia</h4>
+                                <div id="agendaFamilyMeta" class="small">Nenhuma agenda selecionada.</div>
+                                <textarea id="agendaRespostaResponsavel" class="field" rows="3" placeholder="Resposta do responsavel"></textarea>
+                                <div class="agenda-actions">
+                                    <button class="btn" id="btnAgendaLer">Confirmar leitura</button>
+                                    <button class="btn btn-secondary" id="btnAgendaResponder">Salvar resposta</button>
+                                </div>
+                                <p class="ok" id="okAgendaFamilia">Interacao da familia registrada.</p>
+                            </div>
+                            <div id="listAgenda" class="list"></div>
+                            <div id="listAgendaEventos" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-head" style="background:#e67e22;">Comunicacao - Mural</div>
+                        <div class="card-body">
+                            <input id="muralTitulo" class="field" placeholder="Titulo do aviso">
+                            <input id="muralTipo" class="field" placeholder="Tipo">
+                            <textarea id="muralTexto" class="field" rows="3" placeholder="Comunicado"></textarea>
+                            <button class="btn" id="btnMural">Publicar aviso</button>
+                            <p class="ok" id="okMural">Aviso publicado.</p>
+                            <div id="listMural" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-head" style="background:#d68910;">Comunicacao - Chat</div>
+                        <div class="card-body">
+                            <input id="chatPara" class="field" placeholder="Para">
+                            <textarea id="chatMsg" class="field" rows="3" placeholder="Mensagem"></textarea>
+                            <button class="btn" id="btnChat">Enviar mensagem</button>
+                            <p class="ok" id="okChat">Mensagem enviada.</p>
+                            <div id="listChat" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-head" style="background:#c97a0e;">Comunicacao - Galeria e Autorizacoes</div>
+                        <div class="card-body">
+                            <input id="galeriaAluno" class="field" placeholder="Aluno/Turma">
+                            <input id="galeriaUrl" class="field" placeholder="URL da foto">
+                            <input id="galeriaLegenda" class="field" placeholder="Legenda">
+                            <button class="btn" id="btnGaleria">Publicar foto</button>
+                            <p class="ok" id="okGaleria">Foto registrada.</p>
+                            <div class="row">
+                                <input id="autAluno" class="field" placeholder="Aluno">
+                                <input id="autTipo" class="field" placeholder="Tipo autorizacao">
+                            </div>
+                            <input id="autTerceiro" class="field" placeholder="Terceiro autorizado">
+                            <button class="btn btn-secondary" id="btnAut">Salvar autorizacao</button>
+                            <p class="ok" id="okAut">Autorizacao registrada.</p>
+                            <div id="listGaleria" class="list"></div>
+                            <div id="listAutorizacoes" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-head" style="background:#2e86de;">Pedagogico - BNCC e Planejamento</div>
+                        <div class="card-body">
+                            <input id="relAluno" class="field" placeholder="Aluno">
+                            <input id="relCampo" class="field" placeholder="Campo BNCC">
+                            <textarea id="relAvaliacao" class="field" rows="3" placeholder="Avaliacao"></textarea>
+                            <button class="btn" id="btnRelatorio">Salvar relatorio</button>
+                            <p class="ok" id="okRel">Relatorio salvo.</p>
+                            <input id="planTurma" class="field" placeholder="Turma">
+                            <input id="planFaixa" class="field" placeholder="Faixa etaria">
+                            <textarea id="planAtividades" class="field" rows="3" placeholder="Planejamento de aulas"></textarea>
+                            <button class="btn btn-secondary" id="btnPlan">Salvar planejamento</button>
+                            <p class="ok" id="okPlan">Planejamento salvo.</p>
+                            <div id="listRelatoriosBncc" class="list"></div>
+                            <div id="listPlanejamento" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-head" style="background:#217dbb;">Pedagogico - Anamnese, Ocorrencias e Frequencia</div>
+                        <div class="card-body">
+                            <input id="anaAluno" class="field" placeholder="Aluno">
+                            <input id="anaAlergias" class="field" placeholder="Alergias">
+                            <input id="anaRestricoes" class="field" placeholder="Restricoes alimentares">
+                            <textarea id="anaSaude" class="field" rows="2" placeholder="Historico de saude"></textarea>
+                            <button class="btn" id="btnAnamnese">Salvar anamnese</button>
+                            <p class="ok" id="okAna">Anamnese salva.</p>
+                            <div class="row">
+                                <input id="ocoAluno" class="field" placeholder="Aluno">
+                                <input id="ocoTipo" class="field" placeholder="Tipo">
+                            </div>
+                            <textarea id="ocoDescricao" class="field" rows="2" placeholder="Descricao da ocorrencia"></textarea>
+                            <button class="btn btn-secondary" id="btnOcorrencia">Salvar ocorrencia</button>
+                            <p class="ok" id="okOco">Ocorrencia salva.</p>
+                            <div class="row">
+                                <input id="freqData" class="field" type="date">
+                                <input id="freqTurma" class="field" placeholder="Turma">
+                            </div>
+                            <div class="row">
+                                <input id="freqAluno" class="field" placeholder="Aluno">
+                                <select id="freqPresente" class="field"><option value="sim">Presente</option><option value="nao">Ausente</option></select>
+                            </div>
+                            <button class="btn" id="btnFrequencia">Salvar frequencia</button>
+                            <p class="ok" id="okFreq">Frequencia salva.</p>
+                            <div id="listAnamnese" class="list"></div>
+                            <div id="listOcorrencias" class="list"></div>
+                            <div id="listFrequencia" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-head" style="background:#27ae60;">Financeiro - Cobrancas e Regua</div>
+                        <div class="card-body">
+                            <input id="cobAluno" class="field" placeholder="Aluno">
+                            <div class="row">
+                                <input id="cobValor" class="field" type="number" step="0.01" placeholder="Valor">
+                                <input id="cobVenc" class="field" type="date">
+                            </div>
+                            <div class="row">
+                                <select id="cobMetodo" class="field"><option>Boleto</option><option>Pix</option><option>Cartao</option></select>
+                                <select id="cobStatus" class="field"><option>pendente</option><option>pago</option><option>atrasado</option></select>
+                            </div>
+                            <label><input id="cobRec" type="checkbox"> Cobranca recorrente</label>
+                            <button class="btn" id="btnCobranca" style="display:block;margin-top:10px;">Salvar cobranca</button>
+                            <p class="ok" id="okCob">Cobranca salva.</p>
+                            <div class="row">
+                                <input id="reguaRef" class="field" placeholder="ID da cobranca">
+                                <select id="reguaCanal" class="field"><option>email</option><option>sms</option><option>app</option></select>
+                            </div>
+                            <input id="reguaData" class="field" type="date">
+                            <button class="btn btn-secondary" id="btnRegua">Agendar lembrete</button>
+                            <p class="ok" id="okRegua">Lembrete salvo.</p>
+                            <div id="listCobrancas" class="list"></div>
+                            <div id="listRegua" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-head" style="background:#239b56;">Financeiro - Extras e Fluxo de Caixa</div>
+                        <div class="card-body">
+                            <input id="extAluno" class="field" placeholder="Aluno">
+                            <input id="extDesc" class="field" placeholder="Extra">
+                            <div class="row">
+                                <input id="extValor" class="field" type="number" step="0.01" placeholder="Valor">
+                                <input id="extComp" class="field" type="month">
+                            </div>
+                            <button class="btn" id="btnExtra">Salvar extra</button>
+                            <p class="ok" id="okExtra">Extra salvo.</p>
+                            <select id="caixaTipo" class="field"><option>receber</option><option>pagar</option></select>
+                            <input id="caixaDesc" class="field" placeholder="Descricao lancamento">
+                            <div class="row">
+                                <input id="caixaValor" class="field" type="number" step="0.01" placeholder="Valor">
+                                <input id="caixaVenc" class="field" type="date">
+                            </div>
+                            <input id="caixaNota" class="field" placeholder="Numero da nota fiscal">
+                            <button class="btn btn-secondary" id="btnCaixa">Salvar lancamento</button>
+                            <p class="ok" id="okCaixa">Lancamento salvo.</p>
+                            <div id="listExtras" class="list"></div>
+                            <div id="listCaixa" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-head" style="background:#8e44ad;">Administrativo - Matricula e Prontuario</div>
+                        <div class="card-body">
+                            <input id="matAluno" class="field" placeholder="Aluno">
+                            <div class="row"><input id="matResp" class="field" placeholder="Responsavel"><input id="matTurma" class="field" placeholder="Turma do aluno"></div>
+                            <div class="row"><input id="matRespUid" class="field" placeholder="UID do responsavel"><input id="matRespEmail" class="field" placeholder="Email do responsavel"></div>
+                            <input id="matDocUrl" class="field" placeholder="URL documentos">
+                            <label><input id="matContrato" type="checkbox"> Contrato assinado digitalmente</label>
+                            <button class="btn" id="btnMatricula" style="display:block;margin-top:10px;">Salvar matricula</button>
+                            <p class="ok" id="okMat">Matricula salva.</p>
+                            <div class="row"><input id="proAluno" class="field" placeholder="Aluno"><input id="proTipo" class="field" placeholder="Tipo documento"></div>
+                            <input id="proArquivo" class="field" placeholder="URL arquivo">
+                            <textarea id="proObs" class="field" rows="2" placeholder="Observacao"></textarea>
+                            <button class="btn btn-secondary" id="btnProntuario">Salvar prontuario</button>
+                            <p class="ok" id="okPro">Prontuario salvo.</p>
+                            <div id="listMatriculas" class="list"></div>
+                            <div id="listAlunos" class="list"></div>
+                            <div id="listProntuarios" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-head" style="background:#7d3c98;">Administrativo - Acessos e Turmas</div>
+                        <div class="card-body">
+                            <input id="accUid" class="field" placeholder="UID do usuario">
+                            <input id="accEscola" class="field" placeholder="ID da escola (ex: escola-01)">
+                            <select id="accRole" class="field">
+                                <option>professor</option><option>coordenacao</option><option>financeiro</option><option>secretaria</option><option>portaria</option><option>responsavel</option><option>direcao</option><option>admin</option><option>superadmin</option>
+                            </select>
+                            <button class="btn" id="btnAcesso">Atualizar permissao</button>
+                            <p class="ok" id="okAcesso">Permissao atualizada.</p>
+                            <input id="turmaNome" class="field" placeholder="Nome turma">
+                            <div class="row"><input id="turmaFaixa" class="field" placeholder="Faixa etaria"><input id="turmaLimite" class="field" type="number" placeholder="Limite de alunos"></div>
+                            <input id="turmaProf" class="field" placeholder="UID professor responsavel">
+                            <button class="btn btn-secondary" id="btnTurma">Salvar turma</button>
+                            <p class="ok" id="okTurma">Turma salva.</p>
+                            <div id="listUsuarios" class="list"></div>
+                            <div id="listTurmas" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-head" style="background:#c0392b;">Seguranca - Portaria e LGPD</div>
+                        <div class="card-body">
+                            <input id="porAluno" class="field" placeholder="Aluno">
+                            <div class="row"><input id="porRetirado" class="field" placeholder="Retirado por"><input id="porParentesco" class="field" placeholder="Parentesco"></div>
+                            <div class="row"><input id="porRg" class="field" placeholder="RG"><input id="porFoto" class="field" placeholder="URL foto do retirante"></div>
+                            <button class="btn" id="btnPortaria">Registrar retirada</button>
+                            <p class="ok" id="okPortaria">Retirada registrada.</p>
+                            <input id="lgpdAluno" class="field" placeholder="Aluno (titular)">
+                            <input id="lgpdResp" class="field" placeholder="Responsavel legal">
+                            <textarea id="lgpdEscopo" class="field" rows="2" placeholder="Escopo de consentimento"></textarea>
+                            <button class="btn btn-secondary" id="btnLgpd">Registrar consentimento LGPD</button>
+                            <p class="ok" id="okLgpd">Consentimento registrado.</p>
+                            <div id="listPortaria" class="list"></div>
+                            <div id="listLgpd" class="list"></div>
+                        </div>
+                    </section>
                 </div>
             </div>
         </main>
     </div>
 
+    <div id="helpModal" class="modal-overlay" aria-hidden="true">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+            <div class="modal-header">
+                <h2 id="helpTitle">Manual do Sistema</h2>
+                <button id="closeHelp" class="modal-close" aria-label="Fechar manual">&times;</button>
+            </div>
+            <div class="modal-body" id="manualContent">
+                <p>Carregando manual...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function updateDateTime() {
+            const now = new Date();
+            const dateTime = document.getElementById('dateTime');
+            if (dateTime) {
+                dateTime.textContent = now.toLocaleString('pt-BR');
+            }
+        }
+        setInterval(updateDateTime, 1000);
+        updateDateTime();
+
+        const sectionTitles = {
+            agenda: 'Agenda Digital',
+            mural: 'Mural',
+            chat: 'Chat',
+            galeria: 'Galeria e Autorizacoes',
+            autorizacoes: 'Galeria e Autorizacoes',
+            bncc: 'BNCC e Planejamento',
+            planejamento: 'BNCC e Planejamento',
+            anamnese: 'Anamnese, Ocorrencias e Frequencia',
+            ocorrencias: 'Anamnese, Ocorrencias e Frequencia',
+            frequencia: 'Anamnese, Ocorrencias e Frequencia',
+            cobrancas: 'Cobrancas e Regua',
+            regua: 'Cobrancas e Regua',
+            extras: 'Extras e Fluxo de Caixa',
+            caixa: 'Extras e Fluxo de Caixa',
+            matriculas: 'Matricula e Prontuario',
+            alunos: 'Matricula e Prontuario',
+            prontuarios: 'Matricula e Prontuario',
+            usuarios: 'Acessos e Turmas',
+            turmas: 'Acessos e Turmas',
+            portaria: 'Portaria e LGPD',
+            lgpd: 'Portaria e LGPD'
+        };
+
+        const cardIndexMap = {
+            agenda: 0,
+            mural: 1,
+            chat: 2,
+            galeria: 3,
+            autorizacoes: 3,
+            bncc: 4,
+            planejamento: 4,
+            anamnese: 5,
+            ocorrencias: 5,
+            frequencia: 5,
+            cobrancas: 6,
+            regua: 6,
+            extras: 7,
+            caixa: 7,
+            matriculas: 8,
+            alunos: 8,
+            prontuarios: 8,
+            usuarios: 9,
+            turmas: 9,
+            portaria: 10,
+            lgpd: 10
+        };
+
+        function showSection(section) {
+            const cards = Array.from(document.querySelectorAll('#mainGrid > .card'));
+            const cardIndex = cardIndexMap[section];
+            cards.forEach((card, index) => {
+                card.style.display = index === cardIndex ? 'block' : 'none';
+            });
+
+            const sectionTitle = document.getElementById('sectionTitle');
+            if (sectionTitle) {
+                sectionTitle.textContent = sectionTitles[section] || 'Modulos';
+            }
+        }
+
+        document.querySelectorAll('.nav-item').forEach((item) => {
+            item.addEventListener('click', (e) => {
+                e.preventDefault();
+                document.querySelectorAll('.nav-item').forEach((i) => i.classList.remove('active'));
+                item.classList.add('active');
+                showSection(item.getAttribute('data-section'));
+            });
+        });
+
+        const activeItem = document.querySelector('.nav-item.active');
+        showSection(activeItem ? activeItem.getAttribute('data-section') : 'agenda');
+    </script>
     <script type="module" src="assets/js/app.js"></script>
+    <script src="assets/js/help.js"></script>
 </body>
 </html>

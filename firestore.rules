@@ -1,0 +1,238 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSuperuser() {
+      return signedIn() && request.auth.token.email == 'julio.bitaraes.mail@gmail.com';
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid));
+    }
+
+    function hasUserDoc() {
+      return signedIn() && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid));
+    }
+
+    function schoolId() {
+      return hasUserDoc() ? userDoc().data.escola_id : null;
+    }
+
+    function sameSchool(data) {
+      return isSuperuser() || (schoolId() != null && data.escola_id == schoolId());
+    }
+
+    function role() {
+      return isSuperuser() ? 'superadmin' : (hasUserDoc() ? userDoc().data.role : null);
+    }
+
+    function isAdmin() {
+      return role() in ['superadmin', 'admin', 'direcao'];
+    }
+
+    function isStaff() {
+      return role() in ['admin', 'direcao', 'coordenacao', 'professor', 'financeiro', 'secretaria', 'portaria'];
+    }
+
+    function isTeacherOps() {
+      return role() in ['admin', 'direcao', 'coordenacao', 'professor'];
+    }
+
+    function isFinanceOps() {
+      return role() in ['admin', 'direcao', 'financeiro'];
+    }
+
+    function isOfficeOps() {
+      return role() in ['admin', 'direcao', 'secretaria', 'coordenacao'];
+    }
+
+    function isPortariaOps() {
+      return role() in ['admin', 'direcao', 'portaria', 'coordenacao'];
+    }
+
+    function isFamily() {
+      return role() == 'responsavel';
+    }
+
+    match /usuarios/{uid} {
+      allow read: if signedIn() && (
+        isSuperuser() ||
+        request.auth.uid == uid ||
+        (isAdmin() && sameSchool(resource.data))
+      );
+      allow create: if signedIn() && (
+        isSuperuser() ||
+        (request.auth.uid == uid && sameSchool(request.resource.data))
+      );
+      allow update: if signedIn() && (
+        isSuperuser() ||
+        (request.auth.uid == uid && sameSchool(request.resource.data)) ||
+        (isAdmin() && sameSchool(request.resource.data))
+      );
+      allow delete: if isSuperuser() || (isAdmin() && sameSchool(resource.data));
+    }
+
+    match /auditoria/{docId} {
+      allow create: if signedIn() && (isSuperuser() || sameSchool(request.resource.data));
+      allow read: if isSuperuser() || (isAdmin() && sameSchool(resource.data));
+      allow update, delete: if false;
+    }
+
+    match /agenda_diaria/{docId} {
+      allow read: if sameSchool(resource.data) && (isTeacherOps() || isAdmin() || (isFamily() && resource.data.responsavel_uid == request.auth.uid));
+      allow create: if sameSchool(request.resource.data) && isTeacherOps();
+      allow update: if sameSchool(request.resource.data) && (isTeacherOps() || isAdmin() || (
+        isFamily() &&
+        resource.data.responsavel_uid == request.auth.uid &&
+        request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'lido_em',
+          'resposta_responsavel',
+          'respondido_em',
+          'family_last_action',
+          'updated_at',
+          'updated_by'
+        ])
+      ));
+      allow delete: if sameSchool(resource.data) && isAdmin();
+    }
+
+    match /agenda_eventos/{docId} {
+      allow read: if sameSchool(resource.data) && (isTeacherOps() || isAdmin() || (isFamily() && resource.data.responsavel_uid == request.auth.uid));
+      allow create: if sameSchool(request.resource.data) && signedIn() && (
+        (isTeacherOps() && request.resource.data.created_by == request.auth.uid) ||
+        (isFamily() && request.resource.data.responsavel_uid == request.auth.uid)
+      );
+      allow update, delete: if false;
+    }
+
+    match /mural_avisos/{docId} {
+      allow read: if sameSchool(resource.data) && isStaff();
+      allow create: if sameSchool(request.resource.data) && isOfficeOps();
+      allow update, delete: if sameSchool(resource.data) && isAdmin();
+    }
+
+    match /chat_mensagens/{docId} {
+      allow read: if sameSchool(resource.data) && isStaff();
+      allow create: if sameSchool(request.resource.data) && isStaff();
+      allow update, delete: if false;
+    }
+
+    match /galeria_fotos/{docId} {
+      allow read: if sameSchool(resource.data) && isStaff();
+      allow create: if sameSchool(request.resource.data) && isTeacherOps();
+      allow update, delete: if sameSchool(resource.data) && isAdmin();
+    }
+
+    match /autorizacoes_digitais/{docId} {
+      allow read: if sameSchool(resource.data) && isStaff();
+      allow create: if sameSchool(request.resource.data) && isOfficeOps();
+      allow update: if sameSchool(request.resource.data) && isOfficeOps();
+      allow delete: if sameSchool(resource.data) && isAdmin();
+    }
+
+    match /relatorios_bncc/{docId} {
+      allow read: if sameSchool(resource.data) && isTeacherOps();
+      allow create: if sameSchool(request.resource.data) && isTeacherOps();
+      allow update, delete: if sameSchool(resource.data) && isAdmin();
+    }
+
+    match /planejamento_aulas/{docId} {
+      allow read: if sameSchool(resource.data) && isTeacherOps();
+      allow create: if sameSchool(request.resource.data) && isTeacherOps();
+      allow update, delete: if sameSchool(resource.data) && isAdmin();
+    }
+
+    match /fichas_anamnese/{docId} {
+      allow read: if sameSchool(resource.data) && (isTeacherOps() || isOfficeOps());
+      allow create: if sameSchool(request.resource.data) && (isTeacherOps() || isOfficeOps());
+      allow update, delete: if sameSchool(resource.data) && isAdmin();
+    }
+
+    match /ocorrencias/{docId} {
+      allow read: if sameSchool(resource.data) && (isTeacherOps() || isOfficeOps());
+      allow create: if sameSchool(request.resource.data) && isTeacherOps();
+      allow update, delete: if sameSchool(resource.data) && isAdmin();
+    }
+
+    match /frequencia/{docId} {
+      allow read: if sameSchool(resource.data) && (isTeacherOps() || isOfficeOps());
+      allow create: if sameSchool(request.resource.data) && isTeacherOps();
+      allow update, delete: if sameSchool(resource.data) && isAdmin();
+    }
+
+    match /cobrancas/{docId} {
+      allow read: if sameSchool(resource.data) && isFinanceOps();
+      allow create: if sameSchool(request.resource.data) && isFinanceOps();
+      allow update: if sameSchool(request.resource.data) && isFinanceOps();
+      allow delete: if sameSchool(resource.data) && isAdmin();
+    }
+
+    match /regua_cobranca/{docId} {
+      allow read: if sameSchool(resource.data) && isFinanceOps();
+      allow create: if sameSchool(request.resource.data) && isFinanceOps();
+      allow update: if sameSchool(request.resource.data) && isFinanceOps();
+      allow delete: if sameSchool(resource.data) && isAdmin();
+    }
+
+    match /extras_financeiros/{docId} {
+      allow read: if sameSchool(resource.data) && isFinanceOps();
+      allow create: if sameSchool(request.resource.data) && isFinanceOps();
+      allow update: if sameSchool(request.resource.data) && isFinanceOps();
+      allow delete: if sameSchool(resource.data) && isAdmin();
+    }
+
+    match /fluxo_caixa/{docId} {
+      allow read: if sameSchool(resource.data) && isFinanceOps();
+      allow create: if sameSchool(request.resource.data) && isFinanceOps();
+      allow update: if sameSchool(request.resource.data) && isFinanceOps();
+      allow delete: if sameSchool(resource.data) && isAdmin();
+    }
+
+    match /matriculas/{docId} {
+      allow read: if sameSchool(resource.data) && isOfficeOps();
+      allow create: if sameSchool(request.resource.data) && isOfficeOps();
+      allow update: if sameSchool(request.resource.data) && isOfficeOps();
+      allow delete: if sameSchool(resource.data) && isAdmin();
+    }
+
+    match /alunos/{docId} {
+      allow read: if sameSchool(resource.data) && (isTeacherOps() || isOfficeOps() || (isFamily() && resource.data.responsavel_uid == request.auth.uid));
+      allow create, update: if sameSchool(request.resource.data) && isOfficeOps();
+      allow delete: if sameSchool(resource.data) && isAdmin();
+    }
+
+    match /prontuarios/{docId} {
+      allow read: if sameSchool(resource.data) && (isOfficeOps() || isTeacherOps());
+      allow create: if sameSchool(request.resource.data) && isOfficeOps();
+      allow update: if sameSchool(request.resource.data) && isOfficeOps();
+      allow delete: if sameSchool(resource.data) && isAdmin();
+    }
+
+    match /turmas/{docId} {
+      allow read: if sameSchool(resource.data) && isStaff();
+      allow create, update: if sameSchool(request.resource.data) && isOfficeOps();
+      allow delete: if sameSchool(resource.data) && isAdmin();
+    }
+
+    match /portaria_retiradas/{docId} {
+      allow read: if sameSchool(resource.data) && (isPortariaOps() || isAdmin());
+      allow create: if sameSchool(request.resource.data) && isPortariaOps();
+      allow update: if sameSchool(request.resource.data) && isPortariaOps();
+      allow delete: if sameSchool(resource.data) && isAdmin();
+    }
+
+    match /lgpd_consentimentos/{docId} {
+      allow read: if sameSchool(resource.data) && (isOfficeOps() || isAdmin());
+      allow create: if sameSchool(request.resource.data) && isOfficeOps();
+      allow update: if sameSchool(request.resource.data) && (isOfficeOps() || isAdmin());
+      allow delete: if sameSchool(resource.data) && isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
