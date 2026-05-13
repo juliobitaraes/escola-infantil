@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestao Escolar Infantil</title>
+    <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+    <div id="login-screen">
+        <div class="login-box">
+            <h1>Portal da Escola</h1>
+            <p>Acesse para operar o painel financeiro.</p>
+            <input class="field" type="email" id="email" placeholder="E-mail" required>
+            <input class="field" type="password" id="password" placeholder="Senha" required>
+            <button class="btn" id="btnLogin" style="width: 100%;">Entrar</button>
+            <p class="status" id="loginError"></p>
+        </div>
+    </div>
+
+    <div id="dashboard-screen" class="dashboard-layout">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>EducaKids</h2>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <label class="nav-section-label">ACESSO RÁPIDO</label>
+                    <a href="#" class="nav-item active" aria-current="page">
+                        <span class="nav-icon">📊</span> Dashboard
+                    </a>
+                </div>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="user-card">
+                    <div id="userDisplay" class="user-name">Carregando...</div>
+                    <span id="userRole" class="user-role"></span>
+                </div>
+                <button class="btn btn-logout" id="btnLogout">Sair</button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="top-header">
+                <h1>Painel Financeiro</h1>
+            </header>
+
+            <div class="container">
+                <div class="summary" style="max-width:560px;margin:0 auto;">
+                    <div class="kpi">
+                        <span id="kpiCobrancas">Inadimplencia: 0</span>
+                        <span id="kpiCaixa">Saldo caixa: R$ 0,00</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module" src="assets/js/app.js"></script>
+</body>
+</html>
