@@ -14,7 +14,8 @@ import {
   doc,
   getDoc,
   getDocs,
-  setDoc
+  setDoc,
+  deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -69,6 +70,7 @@ let matriculaCameraStream = null;
 let capturedMatriculaPhotoFile = null;
 let capturedMatriculaPhotoPreviewUrl = null;
 let pendingMatriculaDocumentos = [];
+let editingMatriculaId = null;
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
@@ -586,6 +588,30 @@ function formatCep(value) {
   return `${cep.slice(0, 5)}-${cep.slice(5)}`;
 }
 
+function normalizePhone(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 11);
+}
+
+function formatPhone(value) {
+  const digits = normalizePhone(value);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+function normalizeCpf(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 11);
+}
+
+function formatCpf(value) {
+  const cpf = normalizeCpf(value);
+  if (cpf.length <= 3) return cpf;
+  if (cpf.length <= 6) return `${cpf.slice(0, 3)}.${cpf.slice(3)}`;
+  if (cpf.length <= 9) return `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(6)}`;
+  return `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-${cpf.slice(9)}`;
+}
+
 async function buscarEnderecoPorCep() {
   const cepField = document.getElementById("matCep");
   if (!cepField) return;
@@ -785,6 +811,89 @@ function setMatriculaUploadProgress(current, total, message) {
   if (uploadStatus && message) {
     uploadStatus.textContent = `${message} (${safeCurrent}/${safeTotal})`;
   }
+}
+
+function setMatriculaEditMode(matriculaId) {
+  editingMatriculaId = matriculaId || null;
+  const saveButton = document.getElementById("btnMatricula");
+  const cancelButton = document.getElementById("btnMatriculaCancelar");
+  const uploadStatus = document.getElementById("matUploadStatus");
+  if (saveButton) {
+    saveButton.textContent = editingMatriculaId ? "Atualizar matricula" : "Salvar matricula";
+  }
+  if (cancelButton) {
+    cancelButton.classList.toggle("hidden", !editingMatriculaId);
+  }
+  if (uploadStatus && editingMatriculaId) {
+    uploadStatus.textContent = "Modo edicao ativo. Altere os campos e clique em Atualizar matricula.";
+  }
+}
+
+function clearMatriculaForm() {
+  [
+    "matAluno",
+    "matResp",
+    "matRespUid",
+    "matRespEmail",
+    "matRespCpf",
+    "matRespTelefone",
+    "matCep",
+    "matLogradouro",
+    "matNumero",
+    "matComplemento",
+    "matBairro",
+    "matCidade",
+    "matUf",
+    "matReferencia",
+    "matDocUrl"
+  ].forEach((fieldId) => {
+    const element = document.getElementById(fieldId);
+    if (element) element.value = "";
+  });
+  const turmaField = document.getElementById("matTurma");
+  if (turmaField) turmaField.value = "";
+  const contrato = document.getElementById("matContrato");
+  if (contrato) contrato.checked = false;
+  const documentosInput = document.getElementById("matDocumentos");
+  const fotoInput = document.getElementById("matFotoAluno");
+  if (documentosInput) documentosInput.value = "";
+  if (fotoInput) fotoInput.value = "";
+  clearPendingMatriculaDocumentos();
+  renderMatriculaSelectedDocs();
+  stopMatriculaCamera();
+  capturedMatriculaPhotoFile = null;
+  clearMatriculaPhotoPreview();
+  resetMatriculaUploadProgress();
+  setMatriculaEditMode(null);
+}
+
+async function loadMatriculaForEdit(matriculaId) {
+  const snap = await getDoc(doc(db, "matriculas", matriculaId));
+  if (!snap.exists()) {
+    alert("Matricula nao encontrada para edicao.");
+    return;
+  }
+  const data = snap.data() || {};
+  document.getElementById("matAluno").value = data.aluno || "";
+  document.getElementById("matResp").value = data.responsavel || "";
+  document.getElementById("matTurma").value = data.turma || "";
+  document.getElementById("matRespUid").value = data.responsavel_uid || "";
+  document.getElementById("matRespEmail").value = data.responsavel_email || "";
+  document.getElementById("matRespCpf").value = formatCpf(data.responsavel_cpf || "") || "";
+  document.getElementById("matRespTelefone").value = data.responsavel_telefone || "";
+  document.getElementById("matCep").value = formatCep(data.endereco?.cep || "") || "";
+  document.getElementById("matLogradouro").value = data.endereco?.logradouro || "";
+  document.getElementById("matNumero").value = data.endereco?.numero || "";
+  document.getElementById("matComplemento").value = data.endereco?.complemento || "";
+  document.getElementById("matBairro").value = data.endereco?.bairro || "";
+  document.getElementById("matCidade").value = data.endereco?.cidade || "";
+  document.getElementById("matUf").value = data.endereco?.uf || "";
+  document.getElementById("matReferencia").value = data.endereco?.referencia || "";
+  document.getElementById("matDocUrl").value = data.documentos_url || "";
+  document.getElementById("matContrato").checked = !!data.contrato_assinado;
+  clearPendingMatriculaDocumentos();
+  renderMatriculaSelectedDocs();
+  setMatriculaEditMode(matriculaId);
 }
 
 function renderMatriculaSelectedDocs() {
@@ -1418,8 +1527,26 @@ function attachUiHandlers() {
     addPendingMatriculaDocumentos(novosArquivos);
     renderMatriculaSelectedDocs();
   });
+  document.getElementById("matCep")?.addEventListener("input", (event) => {
+    event.target.value = formatCep(event.target.value);
+  });
+  document.getElementById("matRespTelefone")?.addEventListener("input", (event) => {
+    event.target.value = formatPhone(event.target.value);
+  });
+  document.getElementById("matRespTelefone")?.addEventListener("blur", (event) => {
+    event.target.value = formatPhone(event.target.value);
+  });
+  document.getElementById("matRespCpf")?.addEventListener("input", (event) => {
+    event.target.value = formatCpf(event.target.value);
+  });
+  document.getElementById("matRespCpf")?.addEventListener("blur", (event) => {
+    event.target.value = formatCpf(event.target.value);
+  });
   clearPendingMatriculaDocumentos();
   renderMatriculaSelectedDocs();
+  document.getElementById("btnMatriculaCancelar")?.addEventListener("click", () => {
+    clearMatriculaForm();
+  });
   const selectedDocsContainer = document.getElementById("matSelectedDocs");
   if (selectedDocsContainer && !selectedDocsContainer.dataset.downloadBinding) {
     selectedDocsContainer.dataset.downloadBinding = "true";
@@ -1477,6 +1604,73 @@ function attachUiHandlers() {
     listMatriculas.addEventListener("click", async (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
+      const matriculaEditButton = target.closest(".matricula-edit-btn");
+      if (matriculaEditButton instanceof HTMLElement) {
+        const item = matriculaEditButton.closest(".item");
+        if (!(item instanceof HTMLElement)) return;
+        const matriculaId = item.dataset.matriculaId || "";
+        if (!matriculaId) return;
+        await loadMatriculaForEdit(matriculaId);
+        return;
+      }
+      const matriculaDeleteButton = target.closest(".matricula-delete-btn");
+      if (matriculaDeleteButton instanceof HTMLElement) {
+        const item = matriculaDeleteButton.closest(".item");
+        if (!(item instanceof HTMLElement)) return;
+        const matriculaId = item.dataset.matriculaId || "";
+        if (!matriculaId) return;
+        if (!confirm("Deseja excluir esta matricula?")) return;
+
+        const snap = await getDoc(doc(db, "matriculas", matriculaId));
+        if (!snap.exists()) return;
+        const data = snap.data() || {};
+        const docs = Array.isArray(data.documentos_upload) ? data.documentos_upload : [];
+        for (const uploaded of docs) {
+          if (!uploaded?.caminho) continue;
+          try {
+            const token = await auth.currentUser.getIdToken();
+            await fetch(STORAGE_DELETE_FUNCTION_URL, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({ path: uploaded.caminho, schoolId: currentSchoolId() || "" })
+            });
+          } catch (error) {
+            console.error(error);
+          }
+        }
+        if (data?.foto_aluno?.caminho) {
+          try {
+            const token = await auth.currentUser.getIdToken();
+            await fetch(STORAGE_DELETE_FUNCTION_URL, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({ path: data.foto_aluno.caminho, schoolId: currentSchoolId() || "" })
+            });
+          } catch (error) {
+            console.error(error);
+          }
+        }
+
+        await deleteDoc(doc(db, "matriculas", matriculaId));
+        const alunoId = slugify(data.aluno || item.dataset.aluno || "");
+        if (alunoId) {
+          const alunoRef = doc(db, "alunos", alunoId);
+          const alunoSnap = await getDoc(alunoRef);
+          if (alunoSnap.exists() && alunoSnap.data()?.matricula_id === matriculaId) {
+            await deleteDoc(alunoRef);
+          }
+        }
+        if (editingMatriculaId === matriculaId) {
+          clearMatriculaForm();
+        }
+        return;
+      }
       const viewButton = target.closest(".doc-view-btn");
       if (viewButton instanceof HTMLElement) {
         const url = viewButton.getAttribute("data-url") || "";
@@ -1813,6 +2007,8 @@ function attachUiHandlers() {
     await syncResponsibleUidFromEmail();
     const responsavelUid = document.getElementById("matRespUid").value.trim();
     const responsavelEmail = document.getElementById("matRespEmail").value.trim();
+    const responsavelCpf = normalizeCpf(document.getElementById("matRespCpf").value.trim());
+    const responsavelTelefone = formatPhone(document.getElementById("matRespTelefone").value.trim());
     const uploadStatus = document.getElementById("matUploadStatus");
     const alunoSlug = slugify(aluno) || `aluno-${Date.now()}`;
     const documentosInput = document.getElementById("matDocumentos");
@@ -1890,20 +2086,53 @@ function attachUiHandlers() {
       uf: document.getElementById("matUf").value.trim().toUpperCase(),
       referencia: document.getElementById("matReferencia").value.trim()
     };
-    const matriculaRef = await addDoc(collection(db, "matriculas"), withSchoolScope({
-      aluno,
-      responsavel,
-      turma,
-      responsavel_uid: responsavelUid || null,
-      responsavel_email: responsavelEmail || null,
-      endereco,
-      documentos_url: document.getElementById("matDocUrl").value.trim(),
-      documentos_upload: uploadedDocs,
-      foto_aluno: fotoAluno,
-      contrato_assinado: document.getElementById("matContrato").checked,
-      created_at: serverTimestamp(),
-      created_by: auth.currentUser.uid
-    }));
+
+    const isEditing = !!editingMatriculaId;
+    let matriculaId = editingMatriculaId;
+    let documentosPayload = uploadedDocs;
+    let fotoPayload = fotoAluno;
+    if (isEditing) {
+      const existingSnap = await getDoc(doc(db, "matriculas", editingMatriculaId));
+      const existingData = existingSnap.exists() ? existingSnap.data() : {};
+      const existingDocs = Array.isArray(existingData?.documentos_upload) ? existingData.documentos_upload : [];
+      documentosPayload = [...existingDocs, ...uploadedDocs];
+      fotoPayload = fotoAluno || existingData?.foto_aluno || null;
+      await setDoc(doc(db, "matriculas", editingMatriculaId), withSchoolScope({
+        aluno,
+        responsavel,
+        turma,
+        responsavel_uid: responsavelUid || null,
+        responsavel_email: responsavelEmail || null,
+        responsavel_cpf: responsavelCpf || null,
+        responsavel_telefone: responsavelTelefone || null,
+        endereco,
+        documentos_url: document.getElementById("matDocUrl").value.trim(),
+        documentos_upload: documentosPayload,
+        foto_aluno: fotoPayload,
+        contrato_assinado: document.getElementById("matContrato").checked,
+        updated_at: serverTimestamp(),
+        updated_by: auth.currentUser.uid
+      }), { merge: true });
+    } else {
+      const matriculaRef = await addDoc(collection(db, "matriculas"), withSchoolScope({
+        aluno,
+        responsavel,
+        turma,
+        responsavel_uid: responsavelUid || null,
+        responsavel_email: responsavelEmail || null,
+        responsavel_cpf: responsavelCpf || null,
+        responsavel_telefone: responsavelTelefone || null,
+        endereco,
+        documentos_url: document.getElementById("matDocUrl").value.trim(),
+        documentos_upload: documentosPayload,
+        foto_aluno: fotoPayload,
+        contrato_assinado: document.getElementById("matContrato").checked,
+        created_at: serverTimestamp(),
+        created_by: auth.currentUser.uid
+      }));
+      matriculaId = matriculaRef.id;
+    }
+
     await setDoc(
       doc(db, "alunos", slugify(aluno)),
       withSchoolScope({
@@ -1912,25 +2141,20 @@ function attachUiHandlers() {
         responsavel_nome: responsavel,
         responsavel_uid: responsavelUid || null,
         responsavel_email: responsavelEmail || null,
+        responsavel_cpf: responsavelCpf || null,
+        responsavel_telefone: responsavelTelefone || null,
         endereco_residencial: endereco,
-        foto_url: fotoAluno?.url || null,
-        documentos_upload: uploadedDocs,
-        matricula_id: matriculaRef.id,
+        foto_url: fotoPayload?.url || null,
+        documentos_upload: documentosPayload,
+        matricula_id: matriculaId,
         updated_at: serverTimestamp(),
         updated_by: auth.currentUser.uid
       }),
       { merge: true }
     );
-    await audit("create", "matriculas");
+    await audit(isEditing ? "update" : "create", "matriculas");
     await audit("update", "alunos.vinculo_responsavel");
-    stopMatriculaCamera();
-    capturedMatriculaPhotoFile = null;
-    clearMatriculaPhotoPreview();
-    if (documentosInput) documentosInput.value = "";
-    clearPendingMatriculaDocumentos();
-    if (fotoInput) fotoInput.value = "";
-    resetMatriculaUploadProgress();
-    renderMatriculaSelectedDocs();
+    clearMatriculaForm();
     showOk("okMat");
   };
 
@@ -2361,8 +2585,11 @@ function attachLists() {
     const item = renderItem(
       `Matricula - ${data.aluno || "aluno"}`,
       [
+        `<span class="matricula-actions"><button type="button" class="matricula-edit-btn">Editar</button><button type="button" class="matricula-delete-btn">Excluir</button></span>`,
         `Responsavel: ${data.responsavel || "-"}`,
         `Responsavel vinculado: ${data.responsavel_nome || data.responsavel || "-"}`,
+        `CPF do responsavel: ${formatCpf(data.responsavel_cpf || "") || "-"}`,
+        `Telefone do responsavel: ${data.responsavel_telefone || "-"}`,
         `Turma: ${data.turma || "-"}`,
         `Foto do aluno: ${data.foto_aluno?.url ? "enviada" : "nao enviada"}`,
         `Documentos anexados: ${Array.isArray(data.documentos_upload) ? data.documentos_upload.length : 0}`,
@@ -2383,7 +2610,9 @@ function attachLists() {
       [
         `Turma: ${data.turma || "-"}`,
         `Responsavel: ${data.responsavel_nome || "-"}`,
-        `Email do responsavel: ${data.responsavel_email || "-"}`
+        `Email do responsavel: ${data.responsavel_email || "-"}`,
+        `CPF do responsavel: ${formatCpf(data.responsavel_cpf || "") || "-"}`,
+        `Telefone do responsavel: ${data.responsavel_telefone || "-"}`
       ],
       data.updated_at || data.created_at
     )

@@ -516,6 +516,33 @@ textarea:focus-visible,
     border-color: color-mix(in srgb, var(--success) 68%, var(--border-dark) 32%);
 }
 
+.matricula-actions {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.matricula-edit-btn,
+.matricula-delete-btn {
+    border: 1px solid var(--border-dark);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    color: var(--text-strong);
+    background: var(--bg-dark);
+}
+
+.matricula-edit-btn:hover,
+.matricula-delete-btn:hover {
+    background: color-mix(in srgb, var(--bg-dark) 72%, var(--primary) 28%);
+}
+
+.matricula-delete-btn {
+    border-color: color-mix(in srgb, var(--danger) 68%, var(--border-dark) 32%);
+}
+
 #matSelectedDocs {
     display: flex;
     flex-direction: column;

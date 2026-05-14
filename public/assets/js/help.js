@@ -451,6 +451,7 @@ const manualData = {
     title: '📚 Matrículas e Prontuários',
     content: `
       <p><strong>Descrição:</strong> Gestão do cadastro de alunos e arquivo de documentação oficial de cada criança.</p>
+      <p style="color: var(--text-muted); margin-bottom: 16px;"><strong>Fluxo recomendado:</strong> preencher os dados do aluno e do responsável, selecionar a turma, revisar endereço, anexar documentos/foto e salvar. Caso necessário, use os botões <strong>Editar</strong> e <strong>Excluir</strong> na lista de matrículas.</p>
       
       <h4 style="color: var(--primary-light); margin-top: 20px;">Matrículas</h4>
       <div class="fields-grid">
@@ -466,23 +467,53 @@ const manualData = {
         </div>
         <div class="field-doc">
           <strong>Turma</strong>
-          <small>Campo: Input de texto</small>
-          <p>Turma de alocação (ex: "Berçário A", "Maternal B", "Pré I").</p>
+          <small>Campo: Lista de seleção</small>
+          <p>Selecione a turma do aluno entre as turmas cadastradas no módulo de Acessos e Turmas.</p>
         </div>
         <div class="field-doc">
           <strong>UID do Responsável</strong>
-          <small>Campo: Input de texto (opcional)</small>
-          <p>ID de login do sistema para esse responsável, caso tenha conta ativa.</p>
+          <small>Campo: Somente leitura (automático)</small>
+          <p>Identificador preenchido automaticamente quando o e-mail do responsável corresponde a um usuário já cadastrado.</p>
         </div>
         <div class="field-doc">
           <strong>Email do Responsável</strong>
           <small>Campo: Input de texto (opcional)</small>
-          <p>E-mail para comunicação e receita de boletos.</p>
+          <p>E-mail para comunicação e cobrança; usado para tentar vincular automaticamente o responsável no sistema.</p>
+        </div>
+        <div class="field-doc">
+          <strong>CPF do Responsável</strong>
+          <small>Campo: Input com máscara automática</small>
+          <p>Formato aplicado automaticamente: 000.000.000-00.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Telefone do Responsável</strong>
+          <small>Campo: Input com máscara automática</small>
+          <p>Formato aplicado automaticamente para telefone fixo e celular.</p>
+        </div>
+        <div class="field-doc">
+          <strong>CEP e Endereço</strong>
+          <small>Campo: Inputs + botão Buscar CEP</small>
+          <p>CEP com máscara automática; ao buscar CEP o sistema preenche logradouro, bairro, cidade e UF.</p>
         </div>
         <div class="field-doc">
           <strong>Documentos URL</strong>
-          <small>Campo: Input de texto (URL)</small>
-          <p>Link para pasta com documentos digitalizados (RG, certidão, atestado, etc).</p>
+          <small>Campo: Input de texto (URL, opcional)</small>
+          <p>Link externo adicional para documentos, se necessário.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Upload de Documentos</strong>
+          <small>Campo: Upload múltiplo</small>
+          <p>Aceita PDF, JPG e PNG; múltiplos arquivos com limite de 20 MB por arquivo.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Ações dos Documentos</strong>
+          <small>Campo: Botões na lista de arquivos</small>
+          <p>Permite visualizar, baixar, baixar todos e excluir documentos selecionados e já salvos.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Foto do Aluno</strong>
+          <small>Campo: Upload ou câmera</small>
+          <p>É possível anexar por arquivo ou capturar pela câmera diretamente no formulário.</p>
         </div>
         <div class="field-doc">
           <strong>Contrato Assinado</strong>
@@ -490,6 +521,8 @@ const manualData = {
           <p>Marque se o contrato de prestação de serviço foi assinado digitalmente.</p>
         </div>
       </div>
+
+      <p style="color: var(--text-muted); margin-top: 16px;"><strong>Gestão de registros:</strong> cada matrícula pode ser editada e excluída pela lista, mantendo atualização dos dados vinculados do aluno.</p>
 
       <h4 style="color: var(--primary-light); margin-top: 20px;">Prontuários</h4>
       <div class="fields-grid">

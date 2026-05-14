@@ -344,6 +344,8 @@
                             <input id="matAluno" class="field" placeholder="Aluno">
                             <div class="row"><input id="matResp" class="field" placeholder="Responsavel"><select id="matTurma" class="field"><option value="">Turma do aluno</option></select></div>
                             <div class="row"><input id="matRespUid" class="field" placeholder="Identificador do responsavel (automatico)" readonly><input id="matRespEmail" class="field" placeholder="Email do responsavel"></div>
+                            <input id="matRespCpf" class="field" placeholder="CPF do responsavel (ex: 000.000.000-00)">
+                            <input id="matRespTelefone" class="field" placeholder="Telefone do responsavel (ex: (11) 99999-9999)">
                             <div class="row">
                                 <input id="matCep" class="field" placeholder="CEP">
                                 <button class="btn btn-secondary" id="btnBuscarCep" type="button">Buscar CEP</button>
@@ -379,6 +381,7 @@
                             <p class="small" id="matUploadStatus"></p>
                             <label><input id="matContrato" type="checkbox"> Contrato assinado digitalmente</label>
                             <button class="btn" id="btnMatricula" style="display:block;margin-top:10px;">Salvar matricula</button>
+                            <button class="btn btn-secondary hidden" id="btnMatriculaCancelar" type="button" style="display:block;margin-top:10px;">Cancelar edicao</button>
                             <p class="ok" id="okMat">Matricula salva.</p>
                             <div id="listMatriculas" class="list"></div>
                         </div>
