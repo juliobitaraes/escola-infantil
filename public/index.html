@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestao Escolar Infantil</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%236f3590'/%3E%3Cpath d='M14 24 32 14l18 10-18 10-18-10Zm6 6v10c0 4 7 10 12 10s12-6 12-10V30l-12 7-12-7Z' fill='%23fff'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="assets/css/styles.css">
 </head>
 <body>
@@ -21,7 +22,7 @@
     <div id="dashboard-screen" class="dashboard-layout">
         <aside class="sidebar">
             <div class="sidebar-header">
-                <h2>EducaKids</h2>
+                <h2 id="schoolHeaderName">Carregando escola...</h2>
             </div>
             <nav class="sidebar-nav">
                 <div class="nav-section">
@@ -60,6 +61,10 @@
                     <a href="#" class="nav-item" data-section="portaria">🚪 Portaria</a>
                     <a href="#" class="nav-item" data-section="lgpd">🔐 LGPD</a>
                 </div>
+                <div class="nav-section superadmin-nav-only">
+                    <label class="nav-section-label">SUPERADMIN</label>
+                    <a href="#" class="nav-item" data-section="superadmin">🏛️ Escolas e Diretores</a>
+                </div>
             </nav>
             <div class="sidebar-footer">
                 <div class="user-card">
@@ -95,7 +100,7 @@
                                 <input id="agendaData" class="field" type="date">
                             </div>
                             <div class="row">
-                                <input id="agendaResponsavelUid" class="field" placeholder="UID do responsavel" readonly>
+                                <input id="agendaResponsavelUid" class="field" placeholder="Identificador do responsavel (automatico)" readonly>
                                 <select id="agendaStatus" class="field">
                                     <option value="rascunho">Rascunho</option>
                                     <option value="enviado">Enviado</option>
@@ -176,45 +181,57 @@
                     </section>
 
                     <section class="card">
-                        <div class="card-head" style="background:#c97a0e;">Comunicacao - Galeria e Autorizacoes</div>
+                        <div class="card-head" style="background:#c97a0e;">Comunicacao - Galeria</div>
                         <div class="card-body">
                             <input id="galeriaAluno" class="field" placeholder="Aluno/Turma">
                             <input id="galeriaUrl" class="field" placeholder="URL da foto">
                             <input id="galeriaLegenda" class="field" placeholder="Legenda">
                             <button class="btn" id="btnGaleria">Publicar foto</button>
                             <p class="ok" id="okGaleria">Foto registrada.</p>
+                            <div id="listGaleria" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-head" style="background:#b4690c;">Comunicacao - Autorizacoes</div>
+                        <div class="card-body">
                             <div class="row">
                                 <input id="autAluno" class="field" placeholder="Aluno">
                                 <input id="autTipo" class="field" placeholder="Tipo autorizacao">
                             </div>
                             <input id="autTerceiro" class="field" placeholder="Terceiro autorizado">
-                            <button class="btn btn-secondary" id="btnAut">Salvar autorizacao</button>
+                            <button class="btn" id="btnAut">Salvar autorizacao</button>
                             <p class="ok" id="okAut">Autorizacao registrada.</p>
-                            <div id="listGaleria" class="list"></div>
                             <div id="listAutorizacoes" class="list"></div>
                         </div>
                     </section>
 
                     <section class="card">
-                        <div class="card-head" style="background:#2e86de;">Pedagogico - BNCC e Planejamento</div>
+                        <div class="card-head" style="background:#2e86de;">Pedagogico - BNCC</div>
                         <div class="card-body">
                             <input id="relAluno" class="field" placeholder="Aluno">
                             <input id="relCampo" class="field" placeholder="Campo BNCC">
                             <textarea id="relAvaliacao" class="field" rows="3" placeholder="Avaliacao"></textarea>
                             <button class="btn" id="btnRelatorio">Salvar relatorio</button>
                             <p class="ok" id="okRel">Relatorio salvo.</p>
+                            <div id="listRelatoriosBncc" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-head" style="background:#2370bb;">Pedagogico - Planejamento</div>
+                        <div class="card-body">
                             <input id="planTurma" class="field" placeholder="Turma">
                             <input id="planFaixa" class="field" placeholder="Faixa etaria">
                             <textarea id="planAtividades" class="field" rows="3" placeholder="Planejamento de aulas"></textarea>
-                            <button class="btn btn-secondary" id="btnPlan">Salvar planejamento</button>
+                            <button class="btn" id="btnPlan">Salvar planejamento</button>
                             <p class="ok" id="okPlan">Planejamento salvo.</p>
-                            <div id="listRelatoriosBncc" class="list"></div>
                             <div id="listPlanejamento" class="list"></div>
                         </div>
                     </section>
 
                     <section class="card">
-                        <div class="card-head" style="background:#217dbb;">Pedagogico - Anamnese, Ocorrencias e Frequencia</div>
+                        <div class="card-head" style="background:#217dbb;">Pedagogico - Anamnese</div>
                         <div class="card-body">
                             <input id="anaAluno" class="field" placeholder="Aluno">
                             <input id="anaAlergias" class="field" placeholder="Alergias">
@@ -222,13 +239,27 @@
                             <textarea id="anaSaude" class="field" rows="2" placeholder="Historico de saude"></textarea>
                             <button class="btn" id="btnAnamnese">Salvar anamnese</button>
                             <p class="ok" id="okAna">Anamnese salva.</p>
+                            <div id="listAnamnese" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-head" style="background:#1f6fa8;">Pedagogico - Ocorrencias</div>
+                        <div class="card-body">
                             <div class="row">
                                 <input id="ocoAluno" class="field" placeholder="Aluno">
                                 <input id="ocoTipo" class="field" placeholder="Tipo">
                             </div>
                             <textarea id="ocoDescricao" class="field" rows="2" placeholder="Descricao da ocorrencia"></textarea>
-                            <button class="btn btn-secondary" id="btnOcorrencia">Salvar ocorrencia</button>
+                            <button class="btn" id="btnOcorrencia">Salvar ocorrencia</button>
                             <p class="ok" id="okOco">Ocorrencia salva.</p>
+                            <div id="listOcorrencias" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-head" style="background:#1b6395;">Pedagogico - Frequencia</div>
+                        <div class="card-body">
                             <div class="row">
                                 <input id="freqData" class="field" type="date">
                                 <input id="freqTurma" class="field" placeholder="Turma">
@@ -239,14 +270,12 @@
                             </div>
                             <button class="btn" id="btnFrequencia">Salvar frequencia</button>
                             <p class="ok" id="okFreq">Frequencia salva.</p>
-                            <div id="listAnamnese" class="list"></div>
-                            <div id="listOcorrencias" class="list"></div>
                             <div id="listFrequencia" class="list"></div>
                         </div>
                     </section>
 
                     <section class="card">
-                        <div class="card-head" style="background:#27ae60;">Financeiro - Cobrancas e Regua</div>
+                        <div class="card-head" style="background:#27ae60;">Financeiro - Cobrancas</div>
                         <div class="card-body">
                             <input id="cobAluno" class="field" placeholder="Aluno">
                             <div class="row">
@@ -260,20 +289,26 @@
                             <label><input id="cobRec" type="checkbox"> Cobranca recorrente</label>
                             <button class="btn" id="btnCobranca" style="display:block;margin-top:10px;">Salvar cobranca</button>
                             <p class="ok" id="okCob">Cobranca salva.</p>
+                            <div id="listCobrancas" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-head" style="background:#229753;">Financeiro - Regua</div>
+                        <div class="card-body">
                             <div class="row">
                                 <input id="reguaRef" class="field" placeholder="ID da cobranca">
                                 <select id="reguaCanal" class="field"><option>email</option><option>sms</option><option>app</option></select>
                             </div>
                             <input id="reguaData" class="field" type="date">
-                            <button class="btn btn-secondary" id="btnRegua">Agendar lembrete</button>
+                            <button class="btn" id="btnRegua">Agendar lembrete</button>
                             <p class="ok" id="okRegua">Lembrete salvo.</p>
-                            <div id="listCobrancas" class="list"></div>
                             <div id="listRegua" class="list"></div>
                         </div>
                     </section>
 
                     <section class="card">
-                        <div class="card-head" style="background:#239b56;">Financeiro - Extras e Fluxo de Caixa</div>
+                        <div class="card-head" style="background:#239b56;">Financeiro - Extras</div>
                         <div class="card-body">
                             <input id="extAluno" class="field" placeholder="Aluno">
                             <input id="extDesc" class="field" placeholder="Extra">
@@ -283,6 +318,13 @@
                             </div>
                             <button class="btn" id="btnExtra">Salvar extra</button>
                             <p class="ok" id="okExtra">Extra salvo.</p>
+                            <div id="listExtras" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-head" style="background:#1f864b;">Financeiro - Fluxo de Caixa</div>
+                        <div class="card-body">
                             <select id="caixaTipo" class="field"><option>receber</option><option>pagar</option></select>
                             <input id="caixaDesc" class="field" placeholder="Descricao lancamento">
                             <div class="row">
@@ -290,69 +332,236 @@
                                 <input id="caixaVenc" class="field" type="date">
                             </div>
                             <input id="caixaNota" class="field" placeholder="Numero da nota fiscal">
-                            <button class="btn btn-secondary" id="btnCaixa">Salvar lancamento</button>
+                            <button class="btn" id="btnCaixa">Salvar lancamento</button>
                             <p class="ok" id="okCaixa">Lancamento salvo.</p>
-                            <div id="listExtras" class="list"></div>
                             <div id="listCaixa" class="list"></div>
                         </div>
                     </section>
 
                     <section class="card">
-                        <div class="card-head" style="background:#8e44ad;">Administrativo - Matricula e Prontuario</div>
+                        <div class="card-head" style="background:#8e44ad;">Administrativo - Matriculas</div>
                         <div class="card-body">
                             <input id="matAluno" class="field" placeholder="Aluno">
                             <div class="row"><input id="matResp" class="field" placeholder="Responsavel"><input id="matTurma" class="field" placeholder="Turma do aluno"></div>
-                            <div class="row"><input id="matRespUid" class="field" placeholder="UID do responsavel"><input id="matRespEmail" class="field" placeholder="Email do responsavel"></div>
-                            <input id="matDocUrl" class="field" placeholder="URL documentos">
+                            <div class="row"><input id="matRespUid" class="field" placeholder="Identificador do responsavel (automatico)" readonly><input id="matRespEmail" class="field" placeholder="Email do responsavel"></div>
+                            <div class="row">
+                                <input id="matCep" class="field" placeholder="CEP">
+                                <button class="btn btn-secondary" id="btnBuscarCep" type="button">Buscar CEP</button>
+                            </div>
+                            <input id="matLogradouro" class="field" placeholder="Logradouro">
+                            <div class="row"><input id="matNumero" class="field" placeholder="Numero"><input id="matComplemento" class="field" placeholder="Complemento"></div>
+                            <div class="row"><input id="matBairro" class="field" placeholder="Bairro"><input id="matCidade" class="field" placeholder="Cidade"></div>
+                            <div class="row"><input id="matUf" class="field" placeholder="UF" maxlength="2"><input id="matReferencia" class="field" placeholder="Ponto de referencia"></div>
+                            <input id="matDocUrl" class="field" placeholder="URL documentos (opcional)">
+                            <label>Upload de documentos</label>
+                            <input id="matDocumentos" class="field" type="file" multiple>
+                            <label>Foto do aluno</label>
+                            <input id="matFotoAluno" class="field" type="file" accept="image/*">
+                            <div class="row">
+                                <button class="btn btn-secondary" id="btnAbrirCamera" type="button">Abrir camera</button>
+                                <button class="btn btn-secondary" id="btnCapturarFoto" type="button">Capturar foto</button>
+                            </div>
+                            <div class="row">
+                                <button class="btn btn-secondary" id="btnRepetirFoto" type="button">Repetir foto</button>
+                            </div>
+                            <div id="matCameraPanel" class="camera-panel hidden">
+                                <video id="matCameraVideo" class="camera-video" autoplay playsinline muted></video>
+                                <div class="row">
+                                    <button class="btn btn-secondary" id="btnFecharCamera" type="button">Fechar camera</button>
+                                </div>
+                            </div>
+                            <img id="matFotoPreview" class="camera-preview hidden" alt="Preview da foto do aluno">
+                            <canvas id="matCameraCanvas" class="hidden"></canvas>
+                            <p class="small" id="matUploadStatus"></p>
                             <label><input id="matContrato" type="checkbox"> Contrato assinado digitalmente</label>
                             <button class="btn" id="btnMatricula" style="display:block;margin-top:10px;">Salvar matricula</button>
                             <p class="ok" id="okMat">Matricula salva.</p>
+                            <div id="listMatriculas" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-head" style="background:#7e3ea0;">Administrativo - Alunos</div>
+                        <div class="card-body">
+                            <div id="listAlunos" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-head" style="background:#70378e;">Administrativo - Prontuarios</div>
+                        <div class="card-body">
                             <div class="row"><input id="proAluno" class="field" placeholder="Aluno"><input id="proTipo" class="field" placeholder="Tipo documento"></div>
                             <input id="proArquivo" class="field" placeholder="URL arquivo">
                             <textarea id="proObs" class="field" rows="2" placeholder="Observacao"></textarea>
-                            <button class="btn btn-secondary" id="btnProntuario">Salvar prontuario</button>
+                            <button class="btn" id="btnProntuario">Salvar prontuario</button>
                             <p class="ok" id="okPro">Prontuario salvo.</p>
-                            <div id="listMatriculas" class="list"></div>
-                            <div id="listAlunos" class="list"></div>
                             <div id="listProntuarios" class="list"></div>
                         </div>
                     </section>
 
                     <section class="card">
-                        <div class="card-head" style="background:#7d3c98;">Administrativo - Acessos e Turmas</div>
+                        <div class="card-head" style="background:#7d3c98;">Administrativo - Usuarios</div>
                         <div class="card-body">
-                            <input id="accUid" class="field" placeholder="UID do usuario">
+                            <input id="newUserName" class="field" placeholder="Nome do novo usuario">
+                            <input id="newUserEmail" class="field" placeholder="Email do novo usuario">
+                            <input id="newUserPassword" class="field" placeholder="Senha temporaria (opcional)">
+                            <select id="newUserRole" class="field">
+                                <option>professor</option><option>coordenacao</option><option>financeiro</option><option>secretaria</option><option>portaria</option><option>responsavel</option><option>direcao</option><option>admin</option>
+                            </select>
+                            <button class="btn" id="btnUsuarioCriar">Criar usuario</button>
+                            <p class="ok" id="okUsuarioCriado">Usuario criado.</p>
+                            <select id="accUserSelect" class="field">
+                                <option value="">Selecione o usuario</option>
+                            </select>
+                            <input id="accUid" class="field" placeholder="Identificador do usuario (automatico)" readonly>
                             <input id="accEscola" class="field" placeholder="ID da escola (ex: escola-01)">
                             <select id="accRole" class="field">
                                 <option>professor</option><option>coordenacao</option><option>financeiro</option><option>secretaria</option><option>portaria</option><option>responsavel</option><option>direcao</option><option>admin</option><option>superadmin</option>
                             </select>
                             <button class="btn" id="btnAcesso">Atualizar permissao</button>
                             <p class="ok" id="okAcesso">Permissao atualizada.</p>
+                            <div id="listUsuarios" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-head" style="background:#6f3590;">Administrativo - Turmas</div>
+                        <div class="card-body">
+                            <h4 style="margin-top: 0; margin-bottom: 16px; color: var(--heading);">Cadastro de faixas etarias</h4>
+                            <input id="faixaNome" class="field" placeholder="Nome da faixa etaria (ex: 2-3 anos)">
+                            <input id="faixaDescricao" class="field" placeholder="Descricao (opcional)">
+                            <button class="btn" id="btnFaixaCriar" style="margin-bottom: 12px;">Criar faixa etaria</button>
+                            <p class="ok" id="okFaixa">Faixa etaria criada.</p>
+                            <div id="listFaixas" class="list" style="margin-bottom: 20px;"></div>
+
+                            <h4 style="margin-top: 16px; margin-bottom: 12px; color: var(--heading);">Cadastro de turmas</h4>
                             <input id="turmaNome" class="field" placeholder="Nome turma">
-                            <div class="row"><input id="turmaFaixa" class="field" placeholder="Faixa etaria"><input id="turmaLimite" class="field" type="number" placeholder="Limite de alunos"></div>
-                            <input id="turmaProf" class="field" placeholder="UID professor responsavel">
+                            <div class="row"><select id="turmaFaixa" class="field"><option value="">Selecione a faixa etaria</option></select><input id="turmaLimite" class="field" type="number" placeholder="Limite de alunos"></div>
+                            <select id="turmaProf" class="field">
+                                <option value="">Selecione o professor responsavel</option>
+                            </select>
                             <button class="btn btn-secondary" id="btnTurma">Salvar turma</button>
                             <p class="ok" id="okTurma">Turma salva.</p>
-                            <div id="listUsuarios" class="list"></div>
                             <div id="listTurmas" class="list"></div>
                         </div>
                     </section>
 
                     <section class="card">
-                        <div class="card-head" style="background:#c0392b;">Seguranca - Portaria e LGPD</div>
+                        <div class="card-head" style="background:#c0392b;">Seguranca - Portaria</div>
                         <div class="card-body">
                             <input id="porAluno" class="field" placeholder="Aluno">
                             <div class="row"><input id="porRetirado" class="field" placeholder="Retirado por"><input id="porParentesco" class="field" placeholder="Parentesco"></div>
                             <div class="row"><input id="porRg" class="field" placeholder="RG"><input id="porFoto" class="field" placeholder="URL foto do retirante"></div>
                             <button class="btn" id="btnPortaria">Registrar retirada</button>
                             <p class="ok" id="okPortaria">Retirada registrada.</p>
+                            <div id="listPortaria" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-head" style="background:#a63225;">Seguranca - LGPD</div>
+                        <div class="card-body">
                             <input id="lgpdAluno" class="field" placeholder="Aluno (titular)">
                             <input id="lgpdResp" class="field" placeholder="Responsavel legal">
                             <textarea id="lgpdEscopo" class="field" rows="2" placeholder="Escopo de consentimento"></textarea>
-                            <button class="btn btn-secondary" id="btnLgpd">Registrar consentimento LGPD</button>
+                            <button class="btn" id="btnLgpd">Registrar consentimento LGPD</button>
                             <p class="ok" id="okLgpd">Consentimento registrado.</p>
-                            <div id="listPortaria" class="list"></div>
                             <div id="listLgpd" class="list"></div>
+                        </div>
+                    </section>
+
+                    <section class="card superadmin-only">
+                        <div class="card-head" style="background:#1f6f8b;">Superadmin - Escolas e Diretores</div>
+                        <div class="card-body">
+                            <div class="superadmin-summary">
+                                <div class="summary-card"><span id="summarySchools">0</span><small>Escolas totais</small></div>
+                                <div class="summary-card"><span id="summarySchoolsActive">0</span><small>Escolas ativas</small></div>
+                                <div class="summary-card"><span id="summaryDirectors">0</span><small>Diretores totais</small></div>
+                                <div class="summary-card"><span id="summaryDirectorsActive">0</span><small>Diretores ativos</small></div>
+                                <div class="summary-card"><span id="summaryStudents">0</span><small>Alunos totais</small></div>
+                                <div class="summary-card"><span id="summaryEnrollments">0</span><small>Matrículas totais</small></div>
+                            </div>
+                            <div class="superadmin-block" style="margin-bottom:20px;">
+                                <h4>Métricas por escola</h4>
+                                <div class="row">
+                                    <input id="schoolCityFilter" class="field" placeholder="Filtrar por cidade">
+                                    <select id="schoolSortMetric" class="field">
+                                        <option value="total">Ordenar por total</option>
+                                        <option value="students">Ordenar por alunos</option>
+                                        <option value="enrollments">Ordenar por matrículas</option>
+                                        <option value="directors">Ordenar por diretores</option>
+                                    </select>
+                                </div>
+                                <div id="listSchoolMetrics" class="list"></div>
+                            </div>
+                            <div class="superadmin-block" style="margin-bottom:20px;">
+                                <h4>Gráfico por escola</h4>
+                                <div id="schoolChart" class="school-chart"></div>
+                            </div>
+                            <div class="superadmin-block" style="margin-bottom:20px;">
+                                <h4>Ranking de atividade</h4>
+                                <div id="schoolRanking" class="list"></div>
+                            </div>
+                            <div class="superadmin-panel">
+                                <div class="superadmin-block">
+                                    <h4>Cadastrar e gerenciar escola</h4>
+                                    <input id="schoolSearch" class="field" placeholder="Buscar escola por nome ou ID">
+                                    <input id="schoolId" class="field" placeholder="ID da escola (ex: escola-01)">
+                                    <input id="schoolName" class="field" placeholder="Nome da escola">
+                                    <input id="schoolCity" class="field" placeholder="Cidade">
+                                    <select id="schoolStatus" class="field">
+                                        <option value="ativa">Ativa</option>
+                                        <option value="inativa">Inativa</option>
+                                    </select>
+                                    <div class="row">
+                                        <button class="btn" id="btnSchoolSave">Salvar escola</button>
+                                        <button class="btn btn-secondary" id="btnSchoolClear">Limpar</button>
+                                    </div>
+                                    <div class="row">
+                                        <button class="btn btn-secondary" id="btnSchoolInactivate">Inativar escola</button>
+                                    </div>
+                                    <p class="ok" id="okSchool">Escola salva.</p>
+                                </div>
+
+                                <div class="superadmin-block">
+                                    <h4>Cadastrar e gerenciar diretor</h4>
+                                    <input id="directorSearch" class="field" placeholder="Buscar diretor por nome, email ou escola">
+                                    <input id="directorUid" class="field" placeholder="Identificador do diretor (automatico)" readonly>
+                                    <input id="directorName" class="field" placeholder="Nome do diretor">
+                                    <input id="directorEmail" class="field" placeholder="Email do diretor">
+                                    <select id="directorSchoolId" class="field">
+                                        <option value="">Selecione a escola vinculada</option>
+                                    </select>
+                                    <input id="directorTempPassword" class="field" placeholder="Senha temporaria (opcional)">
+                                    <select id="directorStatus" class="field">
+                                        <option value="ativo">Ativo</option>
+                                        <option value="inativo">Inativo</option>
+                                    </select>
+                                    <div class="row">
+                                        <button class="btn" id="btnDirectorCreate">Cadastrar diretor</button>
+                                        <button class="btn btn-secondary" id="btnDirectorSave">Salvar alteracoes</button>
+                                    </div>
+                                    <div class="row">
+                                        <button class="btn btn-secondary" id="btnDirectorClear">Limpar</button>
+                                        <button class="btn btn-secondary" id="btnDirectorResetPassword">Redefinir senha</button>
+                                    </div>
+                                    <div class="row">
+                                        <button class="btn btn-secondary" id="btnDirectorToggleStatus">Inativar/Reativar diretor</button>
+                                    </div>
+                                    <p class="ok" id="okDirector">Diretor salvo.</p>
+                                </div>
+                            </div>
+
+                            <div class="superadmin-lists">
+                                <div>
+                                    <h4>Escolas cadastradas</h4>
+                                    <div id="listEscolas" class="list"></div>
+                                </div>
+                                <div>
+                                    <h4>Diretores cadastrados</h4>
+                                    <div id="listDiretores" class="list"></div>
+                                </div>
+                            </div>
                         </div>
                     </section>
                 </div>
@@ -387,24 +596,25 @@
             agenda: 'Agenda Digital',
             mural: 'Mural',
             chat: 'Chat',
-            galeria: 'Galeria e Autorizacoes',
-            autorizacoes: 'Galeria e Autorizacoes',
-            bncc: 'BNCC e Planejamento',
-            planejamento: 'BNCC e Planejamento',
-            anamnese: 'Anamnese, Ocorrencias e Frequencia',
-            ocorrencias: 'Anamnese, Ocorrencias e Frequencia',
-            frequencia: 'Anamnese, Ocorrencias e Frequencia',
-            cobrancas: 'Cobrancas e Regua',
-            regua: 'Cobrancas e Regua',
-            extras: 'Extras e Fluxo de Caixa',
-            caixa: 'Extras e Fluxo de Caixa',
-            matriculas: 'Matricula e Prontuario',
-            alunos: 'Matricula e Prontuario',
-            prontuarios: 'Matricula e Prontuario',
-            usuarios: 'Acessos e Turmas',
-            turmas: 'Acessos e Turmas',
-            portaria: 'Portaria e LGPD',
-            lgpd: 'Portaria e LGPD'
+            galeria: 'Galeria',
+            autorizacoes: 'Autorizacoes',
+            bncc: 'BNCC',
+            planejamento: 'Planejamento',
+            anamnese: 'Anamnese',
+            ocorrencias: 'Ocorrencias',
+            frequencia: 'Frequencia',
+            cobrancas: 'Cobrancas',
+            regua: 'Regua',
+            extras: 'Extras',
+            caixa: 'Fluxo de Caixa',
+            matriculas: 'Matriculas',
+            alunos: 'Alunos',
+            prontuarios: 'Prontuarios',
+            usuarios: 'Usuarios',
+            turmas: 'Turmas',
+            portaria: 'Portaria',
+            lgpd: 'LGPD',
+            superadmin: 'Superadmin - Escolas e Diretores'
         };
 
         const cardIndexMap = {
@@ -412,23 +622,24 @@
             mural: 1,
             chat: 2,
             galeria: 3,
-            autorizacoes: 3,
-            bncc: 4,
-            planejamento: 4,
-            anamnese: 5,
-            ocorrencias: 5,
-            frequencia: 5,
-            cobrancas: 6,
-            regua: 6,
-            extras: 7,
-            caixa: 7,
-            matriculas: 8,
-            alunos: 8,
-            prontuarios: 8,
-            usuarios: 9,
-            turmas: 9,
-            portaria: 10,
-            lgpd: 10
+            autorizacoes: 4,
+            bncc: 5,
+            planejamento: 6,
+            anamnese: 7,
+            ocorrencias: 8,
+            frequencia: 9,
+            cobrancas: 10,
+            regua: 11,
+            extras: 12,
+            caixa: 13,
+            matriculas: 14,
+            alunos: 15,
+            prontuarios: 16,
+            usuarios: 17,
+            turmas: 18,
+            portaria: 19,
+            lgpd: 20,
+            superadmin: 21
         };
 
         function showSection(section) {
@@ -442,6 +653,18 @@
             if (sectionTitle) {
                 sectionTitle.textContent = sectionTitles[section] || 'Modulos';
             }
+
+            const container = document.querySelector('.container');
+            if (container) {
+                container.scrollTop = 0;
+            }
+
+            const mainContent = document.querySelector('.main-content');
+            if (mainContent) {
+                mainContent.scrollTop = 0;
+            }
+
+            window.scrollTo(0, 0);
         }
 
         document.querySelectorAll('.nav-item').forEach((item) => {

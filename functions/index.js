@@ -2,6 +2,7 @@ const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https")
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
+const crypto = require("crypto");
 const SUPERUSER_EMAIL = "julio.bitaraes.mail@gmail.com";
 
 admin.initializeApp();
@@ -44,6 +45,23 @@ function requireFinanceRole(context) {
   }
 }
 
+function requireSuperUser(context) {
+  if (!context.superuser) {
+    throw new HttpsError("permission-denied", "Acesso restrito ao superusuario.");
+  }
+}
+
+function requireUserManagementRole(context) {
+  const allowed = ["superadmin", "admin", "direcao"];
+  if (!allowed.includes(context.role || "")) {
+    throw new HttpsError("permission-denied", "Sem permissao para gerenciar usuarios.");
+  }
+}
+
+function generateTemporaryPassword() {
+  return crypto.randomBytes(8).toString("hex");
+}
+
 async function writeAudit({ action, area, uid, email, details, escolaId }) {
   await db.collection("auditoria").add({
     action,
@@ -80,6 +98,263 @@ async function criarCobrancaAsaas(payload) {
 
   return response.json();
 }
+
+exports.criarDiretorEscola = onCall({ region: "southamerica-east1" }, async (request) => {
+  requireAuth(request);
+  const context = await getUserContext(request.auth.uid, request.auth.token && request.auth.token.email);
+  requireSuperUser(context);
+
+  const {
+    uid,
+    nome,
+    email,
+    escolaId,
+    senhaTemporaria,
+    status = "ativo"
+  } = request.data || {};
+
+  if (!nome || !email || !escolaId) {
+    throw new HttpsError("invalid-argument", "nome, email e escolaId sao obrigatorios.");
+  }
+
+  const temporaryPassword = senhaTemporaria || generateTemporaryPassword();
+  const authPayload = {
+    displayName: nome,
+    email,
+    password: temporaryPassword,
+    emailVerified: false,
+    disabled: status === "inativo"
+  };
+
+  let targetUid = uid || null;
+  if (targetUid) {
+    try {
+      await admin.auth().getUser(targetUid);
+      await admin.auth().updateUser(targetUid, authPayload);
+    } catch (error) {
+      if (error && error.code === "auth/user-not-found") {
+        await admin.auth().createUser({ uid: targetUid, ...authPayload });
+      } else {
+        throw error;
+      }
+    }
+  } else {
+    const created = await admin.auth().createUser(authPayload);
+    targetUid = created.uid;
+  }
+
+  await db.collection("usuarios").doc(targetUid).set(
+    {
+      uid: targetUid,
+      nome,
+      email,
+      role: "direcao",
+      escola_id: escolaId,
+      status,
+      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_by: request.auth.uid,
+      created_at: admin.firestore.FieldValue.serverTimestamp()
+    },
+    { merge: true }
+  );
+
+  await writeAudit({
+    action: uid ? "update" : "create",
+    area: "diretores",
+    uid: request.auth.uid,
+    email: request.auth.token && request.auth.token.email,
+    escolaId,
+    details: { diretorUid: targetUid, nome, email, status }
+  });
+
+  return {
+    ok: true,
+    uid: targetUid,
+    email,
+    escolaId,
+    temporaryPassword
+  };
+});
+
+exports.criarUsuarioEscola = onCall({ region: "southamerica-east1" }, async (request) => {
+  requireAuth(request);
+  const context = await getUserContext(request.auth.uid, request.auth.token && request.auth.token.email);
+  requireUserManagementRole(context);
+
+  const {
+    nome,
+    email,
+    role,
+    escolaId,
+    senhaTemporaria,
+    status = "ativo"
+  } = request.data || {};
+
+  if (!nome || !email || !role) {
+    throw new HttpsError("invalid-argument", "nome, email e role sao obrigatorios.");
+  }
+
+  const normalizedRole = String(role || "").trim();
+  const allowedRoles = ["professor", "coordenacao", "financeiro", "secretaria", "portaria", "responsavel", "direcao", "admin"];
+  if (!allowedRoles.includes(normalizedRole)) {
+    throw new HttpsError("invalid-argument", "Perfil informado nao e permitido.");
+  }
+
+  if (!context.superuser && !context.escolaId) {
+    throw new HttpsError("failed-precondition", "Usuario sem escola vinculada.");
+  }
+
+  if (context.role === "direcao" && ["admin", "direcao"].includes(normalizedRole)) {
+    throw new HttpsError("permission-denied", "Direcao nao pode criar perfis admin/direcao.");
+  }
+
+  const targetSchoolId = context.superuser
+    ? (escolaId || context.escolaId || null)
+    : context.escolaId;
+
+  if (!targetSchoolId) {
+    throw new HttpsError("invalid-argument", "escolaId e obrigatorio para criar usuario.");
+  }
+
+  if (!context.superuser && escolaId && escolaId !== context.escolaId) {
+    throw new HttpsError("permission-denied", "Nao e permitido criar usuario para outra escola.");
+  }
+
+  const userEmail = normalizeEmail(email);
+  const temporaryPassword = senhaTemporaria || generateTemporaryPassword();
+  const disabled = status === "inativo";
+
+  let targetUid = null;
+  let created = false;
+
+  try {
+    const existing = await admin.auth().getUserByEmail(userEmail);
+    targetUid = existing.uid;
+    await admin.auth().updateUser(targetUid, {
+      displayName: nome,
+      disabled
+    });
+  } catch (error) {
+    if (error && error.code === "auth/user-not-found") {
+      const createdUser = await admin.auth().createUser({
+        displayName: nome,
+        email: userEmail,
+        password: temporaryPassword,
+        emailVerified: false,
+        disabled
+      });
+      targetUid = createdUser.uid;
+      created = true;
+    } else {
+      throw error;
+    }
+  }
+
+  await db.collection("usuarios").doc(targetUid).set(
+    {
+      uid: targetUid,
+      nome,
+      email: userEmail,
+      role: normalizedRole,
+      escola_id: targetSchoolId,
+      status: status === "inativo" ? "inativo" : "ativo",
+      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_by: request.auth.uid,
+      created_at: admin.firestore.FieldValue.serverTimestamp()
+    },
+    { merge: true }
+  );
+
+  await writeAudit({
+    action: created ? "create" : "update",
+    area: "usuarios.cadastro",
+    uid: request.auth.uid,
+    email: request.auth.token && request.auth.token.email,
+    escolaId: targetSchoolId,
+    details: { userUid: targetUid, email: userEmail, role: normalizedRole, created }
+  });
+
+  return {
+    ok: true,
+    uid: targetUid,
+    email: userEmail,
+    role: normalizedRole,
+    escolaId: targetSchoolId,
+    created,
+    temporaryPassword: created ? temporaryPassword : null
+  };
+});
+
+exports.resetDiretorSenha = onCall({ region: "southamerica-east1" }, async (request) => {
+  requireAuth(request);
+  const context = await getUserContext(request.auth.uid, request.auth.token && request.auth.token.email);
+  requireSuperUser(context);
+
+  const { uid, password } = request.data || {};
+  if (!uid) {
+    throw new HttpsError("invalid-argument", "uid e obrigatorio.");
+  }
+
+  const newPassword = password || generateTemporaryPassword();
+  await admin.auth().updateUser(uid, { password: newPassword, disabled: false });
+
+  await writeAudit({
+    action: "update",
+    area: "diretores.senha",
+    uid: request.auth.uid,
+    email: request.auth.token && request.auth.token.email,
+    escolaId: context.escolaId || null,
+    details: { diretorUid: uid, passwordReset: true }
+  });
+
+  return {
+    ok: true,
+    uid,
+    temporaryPassword: newPassword
+  };
+});
+
+exports.setDiretorStatus = onCall({ region: "southamerica-east1" }, async (request) => {
+  requireAuth(request);
+  const context = await getUserContext(request.auth.uid, request.auth.token && request.auth.token.email);
+  requireSuperUser(context);
+
+  const { uid, status } = request.data || {};
+  if (!uid || !status) {
+    throw new HttpsError("invalid-argument", "uid e status sao obrigatorios.");
+  }
+
+  const normalizedStatus = status === "ativo" ? "ativo" : "inativo";
+  await admin.auth().updateUser(uid, { disabled: normalizedStatus === "inativo" });
+
+  const userRef = db.collection("usuarios").doc(uid);
+  const userSnap = await userRef.get();
+  const userData = userSnap.exists ? userSnap.data() : {};
+  await userRef.set(
+    {
+      uid,
+      status: normalizedStatus,
+      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_by: request.auth.uid
+    },
+    { merge: true }
+  );
+
+  await writeAudit({
+    action: "update",
+    area: "diretores.status",
+    uid: request.auth.uid,
+    email: request.auth.token && request.auth.token.email,
+    escolaId: userData.escola_id || context.escolaId || null,
+    details: { diretorUid: uid, status: normalizedStatus }
+  });
+
+  return {
+    ok: true,
+    uid,
+    status: normalizedStatus
+  };
+});
 
 exports.criarCobrancaExterna = onCall({ region: "southamerica-east1" }, async (request) => {
   requireAuth(request);

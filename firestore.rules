@@ -75,6 +75,10 @@ service cloud.firestore {
       allow delete: if isSuperuser() || (isAdmin() && sameSchool(resource.data));
     }
 
+    match /escolas/{docId} {
+      allow read, create, update, delete: if isSuperuser();
+    }
+
     match /auditoria/{docId} {
       allow create: if signedIn() && (isSuperuser() || sameSchool(request.resource.data));
       allow read: if isSuperuser() || (isAdmin() && sameSchool(resource.data));
@@ -208,6 +212,12 @@ service cloud.firestore {
       allow read: if sameSchool(resource.data) && (isOfficeOps() || isTeacherOps());
       allow create: if sameSchool(request.resource.data) && isOfficeOps();
       allow update: if sameSchool(request.resource.data) && isOfficeOps();
+      allow delete: if sameSchool(resource.data) && isAdmin();
+    }
+
+    match /faixas_etarias/{docId} {
+      allow read: if sameSchool(resource.data) && isStaff();
+      allow create, update: if sameSchool(request.resource.data) && isOfficeOps();
       allow delete: if sameSchool(resource.data) && isAdmin();
     }
 

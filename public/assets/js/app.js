@@ -1,5 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js";
 import {
   getFirestore,
   collection,
@@ -15,6 +16,12 @@ import {
   getDocs,
   setDoc
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import {
+  getStorage,
+  ref as storageRef,
+  uploadBytes,
+  getDownloadURL
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBVPjBwXLM2gfN_TXffajP5hNqkcRF3nws",
@@ -28,6 +35,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app);
+const functions = getFunctions(app, "southamerica-east1");
+const criarDiretorEscolaFn = httpsCallable(functions, "criarDiretorEscola");
+const criarUsuarioEscolaFn = httpsCallable(functions, "criarUsuarioEscola");
+const resetDiretorSenhaFn = httpsCallable(functions, "resetDiretorSenha");
+const setDiretorStatusFn = httpsCallable(functions, "setDiretorStatus");
 const SUPERUSER_EMAIL = "julio.bitaraes.mail@gmail.com";
 
 const loginScreen = document.getElementById("login-screen");
@@ -39,6 +52,7 @@ const btnLogout = document.getElementById("btnLogout");
 const loginError = document.getElementById("loginError");
 const userDisplay = document.getElementById("userDisplay");
 const userRole = document.getElementById("userRole");
+const schoolHeaderName = document.getElementById("schoolHeaderName");
 const familyDashboard = document.getElementById("familyDashboard");
 const mainGrid = document.getElementById("mainGrid");
 
@@ -47,6 +61,17 @@ let currentProfile = { role: "coordenacao", escola_id: "escola-padrao" };
 let selectedAgendaId = null;
 let selectedAgendaData = null;
 let cachedAgendaEvents = [];
+let selectedSchoolId = null;
+let selectedDirectorId = null;
+let cachedSchools = [];
+let cachedDirectors = [];
+let cachedUsers = [];
+let cachedStudents = [];
+let cachedEnrollments = [];
+let cachedFaixasEtarias = [];
+let matriculaCameraStream = null;
+let capturedMatriculaPhotoFile = null;
+let capturedMatriculaPhotoPreviewUrl = null;
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
@@ -56,6 +81,10 @@ function isSuperUser() {
   const authEmail = auth.currentUser ? normalizeEmail(auth.currentUser.email) : "";
   const profileEmail = normalizeEmail(currentProfile.email);
   return authEmail === SUPERUSER_EMAIL || profileEmail === SUPERUSER_EMAIL;
+}
+
+function isSuperAdmin() {
+  return isSuperUser();
 }
 
 function currentSchoolId() {
@@ -74,10 +103,501 @@ function scopedCollectionQuery(collectionName, constraints = []) {
   return query(collection(db, collectionName), ...scope, ...constraints);
 }
 
+function setSelectedSchool(id, data) {
+  selectedSchoolId = id || null;
+  const fields = ["schoolId", "schoolName", "schoolCity", "schoolStatus"];
+  if (!id || !data) {
+    fields.forEach((fieldId) => {
+      const element = document.getElementById(fieldId);
+      if (element) element.value = "";
+    });
+    return;
+  }
+  const mappings = {
+    schoolId: data.escola_id || id || "",
+    schoolName: data.nome || "",
+    schoolCity: data.cidade || "",
+    schoolStatus: data.status || "ativa"
+  };
+  Object.entries(mappings).forEach(([fieldId, value]) => {
+    const element = document.getElementById(fieldId);
+    if (element) element.value = value;
+  });
+}
+
+function setSelectedDirector(id, data) {
+  selectedDirectorId = id || null;
+  const fields = ["directorUid", "directorName", "directorEmail", "directorSchoolId", "directorTempPassword", "directorStatus"];
+  if (!id || !data) {
+    fields.forEach((fieldId) => {
+      const element = document.getElementById(fieldId);
+      if (element) element.value = "";
+    });
+    const status = document.getElementById("directorStatus");
+    if (status) status.value = "ativo";
+    return;
+  }
+  const mappings = {
+    directorUid: id,
+    directorName: data.nome || "",
+    directorEmail: data.email || "",
+    directorSchoolId: data.escola_id || "",
+    directorTempPassword: "",
+    directorStatus: data.status || "ativo"
+  };
+  Object.entries(mappings).forEach(([fieldId, value]) => {
+    const element = document.getElementById(fieldId);
+    if (element) element.value = value;
+  });
+}
+
+function clearSchoolForm() {
+  setSelectedSchool(null, null);
+}
+
+function clearDirectorForm() {
+  setSelectedDirector(null, null);
+}
+
+function populateDirectorSchoolOptions() {
+  const schoolSelect = document.getElementById("directorSchoolId");
+  if (!schoolSelect) return;
+
+  const previousValue = schoolSelect.value;
+  const rows = cachedSchools
+    .map(({ id, data }) => {
+      const schoolId = data.escola_id || id;
+      const schoolName = data.nome || schoolId;
+      return { id: schoolId, name: schoolName };
+    })
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+  schoolSelect.innerHTML = "";
+
+  const placeholderOption = document.createElement("option");
+  placeholderOption.value = "";
+  placeholderOption.textContent = "Selecione a escola vinculada";
+  schoolSelect.appendChild(placeholderOption);
+
+  rows.forEach((row) => {
+    const option = document.createElement("option");
+    option.value = row.id;
+    option.textContent = `${row.name} (${row.id})`;
+    schoolSelect.appendChild(option);
+  });
+
+  if (previousValue) {
+    const hasOption = rows.some((row) => row.id === previousValue);
+    if (!hasOption) {
+      const fallbackOption = document.createElement("option");
+      fallbackOption.value = previousValue;
+      fallbackOption.textContent = previousValue;
+      schoolSelect.appendChild(fallbackOption);
+    }
+    schoolSelect.value = previousValue;
+  }
+}
+
+function populateAccUserOptions() {
+  const userSelect = document.getElementById("accUserSelect");
+  if (!userSelect) return;
+
+  const previousValue = userSelect.value;
+  const users = cachedUsers
+    .map(({ id, data }) => ({ id, email: data.email || id, nome: data.nome || "", role: data.role || "-" }))
+    .sort((a, b) => String(a.email).localeCompare(String(b.email)));
+
+  userSelect.innerHTML = "<option value=\"\">Selecione o usuario</option>";
+  users.forEach((user) => {
+    const option = document.createElement("option");
+    option.value = user.id;
+    option.textContent = `${user.nome || user.email} (${user.role})`;
+    userSelect.appendChild(option);
+  });
+
+  if (previousValue && users.some((user) => user.id === previousValue)) {
+    userSelect.value = previousValue;
+  }
+}
+
+function populateProfessorOptions() {
+  const professorSelect = document.getElementById("turmaProf");
+  if (!professorSelect) return;
+
+  const previousValue = professorSelect.value;
+  const allowedRoles = new Set(["professor", "coordenacao", "direcao"]);
+  const professors = cachedUsers
+    .filter(({ data }) => allowedRoles.has(data.role || ""))
+    .map(({ id, data }) => ({ id, nome: data.nome || "", email: data.email || id, role: data.role || "-" }))
+    .sort((a, b) => String(a.nome || a.email).localeCompare(String(b.nome || b.email)));
+
+  professorSelect.innerHTML = "<option value=\"\">Selecione o professor responsavel</option>";
+  professors.forEach((professor) => {
+    const option = document.createElement("option");
+    option.value = professor.id;
+    option.textContent = `${professor.nome || professor.email} (${professor.role})`;
+    professorSelect.appendChild(option);
+  });
+
+  if (previousValue && professors.some((professor) => professor.id === previousValue)) {
+    professorSelect.value = previousValue;
+  }
+}
+
+function populateFaixaEtariaOptions() {
+  const faixaSelect = document.getElementById("turmaFaixa");
+  if (!faixaSelect) return;
+
+  const previousValue = faixaSelect.value;
+  const faixas = cachedFaixasEtarias
+    .map(({ id, data }) => ({ id, nome: data.nome || id, descricao: data.descricao || "" }))
+    .sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+
+  faixaSelect.innerHTML = "<option value=\"\">Selecione a faixa etaria</option>";
+  faixas.forEach((faixa) => {
+    const option = document.createElement("option");
+    option.value = faixa.id;
+    option.textContent = faixa.nome + (faixa.descricao ? ` - ${faixa.descricao}` : "");
+    faixaSelect.appendChild(option);
+  });
+
+  if (previousValue && faixas.some((faixa) => faixa.id === previousValue)) {
+    faixaSelect.value = previousValue;
+  }
+}
+
+async function syncResponsibleUidFromEmail() {
+  const emailField = document.getElementById("matRespEmail");
+  const uidField = document.getElementById("matRespUid");
+  if (!emailField || !uidField) return;
+
+  const email = normalizeEmail(emailField.value);
+  if (!email) {
+    uidField.value = "";
+    return;
+  }
+
+  const found = cachedUsers.find(({ data }) => normalizeEmail(data.email) === email);
+  if (found) {
+    uidField.value = found.id;
+    return;
+  }
+
+  const snap = await getDocs(scopedCollectionQuery("usuarios", [where("email", "==", email), limit(1)]));
+  uidField.value = snap.empty ? "" : snap.docs[0].id;
+}
+
+function normalizeSearch(value) {
+  return normalizeEmail(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function toDisplayWord(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+}
+
+function extractFirstName(fullName) {
+  const normalized = String(fullName || "").trim();
+  if (!normalized) return "";
+  const first = normalized.split(/\s+/)[0] || "";
+  return toDisplayWord(first);
+}
+
+function resolveUserFirstName(user) {
+  const profileName = extractFirstName(currentProfile.nome || currentProfile.name || "");
+  if (profileName) return profileName;
+
+  const authName = extractFirstName(user?.displayName || "");
+  if (authName) return authName;
+
+  const emailPrefix = String(user?.email || "").split("@")[0] || "";
+  const token = emailPrefix.split(/[._-]+/)[0] || emailPrefix;
+  return toDisplayWord(token) || "Usuario";
+}
+
+function humanizeSchoolId(value) {
+  return String(value || "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function resolveSchoolDisplayName() {
+  if (isSuperUser()) return "Painel Superadmin";
+
+  const profileName = (
+    currentProfile.escola_nome ||
+    currentProfile.school_name ||
+    currentProfile.nome_escola ||
+    ""
+  ).trim();
+  if (profileName) return profileName;
+
+  const schoolId = currentSchoolId();
+  if (!schoolId) return "Portal Escolar";
+
+  return humanizeSchoolId(schoolId);
+}
+
+function updateSchoolHeaderName() {
+  if (!schoolHeaderName) return;
+  schoolHeaderName.textContent = resolveSchoolDisplayName();
+}
+
+function updateSuperadminSummary() {
+  const summarySchools = document.getElementById("summarySchools");
+  const summarySchoolsActive = document.getElementById("summarySchoolsActive");
+  const summaryDirectors = document.getElementById("summaryDirectors");
+  const summaryDirectorsActive = document.getElementById("summaryDirectorsActive");
+  const summaryStudents = document.getElementById("summaryStudents");
+  const summaryEnrollments = document.getElementById("summaryEnrollments");
+  if (summarySchools) summarySchools.textContent = `${cachedSchools.length}`;
+  if (summarySchoolsActive) summarySchoolsActive.textContent = `${cachedSchools.filter(({ data }) => (data.status || "ativa") === "ativa").length}`;
+  if (summaryDirectors) summaryDirectors.textContent = `${cachedDirectors.length}`;
+  if (summaryDirectorsActive) summaryDirectorsActive.textContent = `${cachedDirectors.filter(({ data }) => (data.status || "ativo") === "ativo").length}`;
+  if (summaryStudents) summaryStudents.textContent = `${cachedStudents.length}`;
+  if (summaryEnrollments) summaryEnrollments.textContent = `${cachedEnrollments.length}`;
+
+  const metricsList = document.getElementById("listSchoolMetrics");
+  if (!metricsList) return;
+  metricsList.innerHTML = "";
+  if (!cachedSchools.length) {
+    metricsList.innerHTML = "<p class=\"small\">Nenhuma escola cadastrada.</p>";
+    const chart = document.getElementById("schoolChart");
+    if (chart) chart.innerHTML = "<p class=\"small\">Nenhuma escola cadastrada.</p>";
+    const ranking = document.getElementById("schoolRanking");
+    if (ranking) ranking.innerHTML = "<p class=\"small\">Nenhuma escola cadastrada.</p>";
+    return;
+  }
+
+  const cityFilter = normalizeSearch(document.getElementById("schoolCityFilter")?.value || "");
+  const sortMetric = document.getElementById("schoolSortMetric")?.value || "total";
+  const rows = cachedSchools
+    .map(({ id, data }) => {
+      const schoolId = data.escola_id || id;
+      return {
+        id: schoolId,
+        name: data.nome || schoolId,
+        status: data.status || "ativa",
+        city: data.cidade || "-",
+        students: cachedStudents.filter(({ data: student }) => student.escola_id === schoolId).length,
+        enrollments: cachedEnrollments.filter(({ data: enrollment }) => enrollment.escola_id === schoolId).length,
+        directors: cachedDirectors.filter(({ data: director }) => director.escola_id === schoolId).length
+      };
+    })
+    .filter((row) => {
+      if (!cityFilter) return true;
+      return normalizeSearch(row.city).includes(cityFilter) || normalizeSearch(row.name).includes(cityFilter) || normalizeSearch(row.id).includes(cityFilter);
+    })
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+  const sortedRows = [...rows].sort((a, b) => {
+    if (sortMetric === "students") return b.students - a.students;
+    if (sortMetric === "enrollments") return b.enrollments - a.enrollments;
+    if (sortMetric === "directors") return b.directors - a.directors;
+    return (b.students + b.enrollments + b.directors) - (a.students + a.enrollments + a.directors);
+  });
+
+  rows.forEach((row) => {
+    metricsList.appendChild(
+      renderItem(
+        `${row.name}`,
+        [
+          `ID: ${row.id}`,
+          `Cidade: ${row.city}`,
+          `Status: ${row.status}`,
+          `Alunos: ${row.students}`,
+          `Matrículas: ${row.enrollments}`,
+          `Diretores: ${row.directors}`
+        ],
+        null
+      )
+    );
+  });
+
+  const chart = document.getElementById("schoolChart");
+  if (!chart) return;
+  chart.innerHTML = "";
+  const maxValue = Math.max(1, ...rows.flatMap((row) => [row.students, row.enrollments, row.directors]));
+  sortedRows.forEach((row) => {
+    const chartRow = document.createElement("div");
+    chartRow.className = "school-chart-row";
+    if (selectedSchoolId === row.id) {
+      chartRow.style.borderColor = "var(--primary-light)";
+      chartRow.style.boxShadow = "0 0 0 2px rgba(74, 155, 136, 0.18)";
+    }
+    chartRow.innerHTML = `
+      <div class="school-chart-name">${row.name}</div>
+      <div class="school-chart-bars">
+        <div class="school-chart-bar-line">
+          <div class="school-chart-bar-label">Alunos</div>
+          <div class="school-chart-bar-wrap"><div class="school-chart-bar" style="width:${Math.round((row.students / maxValue) * 100)}%;"></div></div>
+          <div class="school-chart-bar-value">${row.students}</div>
+        </div>
+        <div class="school-chart-bar-line">
+          <div class="school-chart-bar-label">Matrículas</div>
+          <div class="school-chart-bar-wrap"><div class="school-chart-bar" style="width:${Math.round((row.enrollments / maxValue) * 100)}%;"></div></div>
+          <div class="school-chart-bar-value">${row.enrollments}</div>
+        </div>
+        <div class="school-chart-bar-line">
+          <div class="school-chart-bar-label">Diretores</div>
+          <div class="school-chart-bar-wrap"><div class="school-chart-bar" style="width:${Math.round((row.directors / maxValue) * 100)}%;"></div></div>
+          <div class="school-chart-bar-value">${row.directors}</div>
+        </div>
+      </div>
+      <div class="school-chart-value">Total: ${row.students + row.enrollments + row.directors}</div>
+    `;
+    chart.appendChild(chartRow);
+  });
+
+  const ranking = document.getElementById("schoolRanking");
+  if (!ranking) return;
+  ranking.innerHTML = "";
+  const rankingRows = [...sortedRows]
+    .map((row) => ({ ...row, score: row.students + row.enrollments + row.directors }))
+    .sort((a, b) => b.score - a.score);
+
+  rankingRows.forEach((row, index) => {
+    const item = renderItem(
+      `${index + 1}. ${row.name}`,
+      [`ID: ${row.id}`, `Cidade: ${row.city}`, `Status: ${row.status}`],
+      null
+    );
+    item.classList.add("school-ranking-item");
+    if (selectedSchoolId === row.id) {
+      item.style.borderColor = "var(--primary-light)";
+    }
+    const score = document.createElement("div");
+    score.className = "school-ranking-score";
+    score.textContent = `${row.score} pontos`;
+    item.appendChild(score);
+    ranking.appendChild(item);
+  });
+}
+
+function renderSuperadminSchools() {
+  const list = document.getElementById("listEscolas");
+  if (!list) return;
+  const search = normalizeSearch(document.getElementById("schoolSearch")?.value || "");
+  list.innerHTML = "";
+  const rows = cachedSchools
+    .filter(({ id, data }) => {
+      if (!search) return true;
+      return normalizeSearch(`${data.nome || ""} ${data.escola_id || id} ${data.cidade || ""}`).includes(search);
+    })
+    .sort((a, b) => String(a.data.nome || a.id).localeCompare(String(b.data.nome || b.id)));
+
+  if (!rows.length) {
+    list.innerHTML = "<p class=\"small\">Nenhuma escola encontrada.</p>";
+    updateSuperadminSummary();
+    return;
+  }
+
+  rows.forEach(({ id, data }) => {
+    const item = renderItem(
+      `${data.nome || id}`,
+      [`ID: ${data.escola_id || id}`, `Cidade: ${data.cidade || "-"}`, `Status: ${data.status || "ativa"}`],
+      data.updated_at || data.created_at
+    );
+    item.onclick = () => setSelectedSchool(id, data);
+    list.appendChild(item);
+  });
+  updateSuperadminSummary();
+}
+
+function renderSuperadminDirectors() {
+  const list = document.getElementById("listDiretores");
+  if (!list) return;
+  const search = normalizeSearch(document.getElementById("directorSearch")?.value || "");
+  list.innerHTML = "";
+  const rows = cachedDirectors
+    .filter(({ id, data }) => {
+      if (!search) return true;
+      return normalizeSearch(`${data.nome || ""} ${data.email || ""} ${data.escola_id || ""} ${id}`).includes(search);
+    })
+    .sort((a, b) => String(a.data.nome || a.id).localeCompare(String(b.data.nome || b.id)));
+
+  if (!rows.length) {
+    list.innerHTML = "<p class=\"small\">Nenhum diretor encontrado.</p>";
+    updateSuperadminSummary();
+    return;
+  }
+
+  rows.forEach(({ id, data }) => {
+    const item = renderItem(
+      `${data.nome || "Diretor"}`,
+      [`Email: ${data.email || "-"}`, `Escola: ${data.escola_id || "-"}`, `Status: ${data.status || "ativo"}`],
+      data.updated_at || data.created_at
+    );
+    item.onclick = () => setSelectedDirector(id, data);
+    list.appendChild(item);
+  });
+  updateSuperadminSummary();
+}
+
+function setSchoolStatus(status) {
+  const statusField = document.getElementById("schoolStatus");
+  if (statusField) {
+    statusField.value = status;
+  }
+}
+
+function setDirectorStatusField(status) {
+  const statusField = document.getElementById("directorStatus");
+  if (statusField) {
+    statusField.value = status;
+  }
+}
+
 function formatDate(value) {
   if (!value) return "sem data";
   if (typeof value.toDate === "function") return value.toDate().toLocaleString("pt-BR");
   return String(value);
+}
+
+function normalizeCep(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 8);
+}
+
+function formatCep(value) {
+  const cep = normalizeCep(value);
+  if (cep.length !== 8) return cep;
+  return `${cep.slice(0, 5)}-${cep.slice(5)}`;
+}
+
+async function buscarEnderecoPorCep() {
+  const cepField = document.getElementById("matCep");
+  if (!cepField) return;
+
+  const cep = normalizeCep(cepField.value);
+  if (cep.length !== 8) {
+    alert("Informe um CEP valido com 8 digitos.");
+    return;
+  }
+
+  const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+  if (!response.ok) {
+    alert("Nao foi possivel consultar o CEP no momento.");
+    return;
+  }
+
+  const data = await response.json();
+  if (data.erro) {
+    alert("CEP nao encontrado.");
+    return;
+  }
+
+  cepField.value = formatCep(cep);
+  document.getElementById("matLogradouro").value = data.logradouro || "";
+  document.getElementById("matBairro").value = data.bairro || "";
+  document.getElementById("matCidade").value = data.localidade || "";
+  document.getElementById("matUf").value = (data.uf || "").toUpperCase();
+  const numeroField = document.getElementById("matNumero");
+  if (numeroField && !numeroField.value.trim()) {
+    numeroField.focus();
+  }
 }
 
 function money(n) {
@@ -95,6 +615,118 @@ function slugify(value) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
+}
+
+function sanitizeFileName(fileName) {
+  return String(fileName || "arquivo")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 120);
+}
+
+async function uploadMatriculaFile(file, { alunoSlug, folder }) {
+  const schoolSegment = currentSchoolId() || "sem-escola";
+  const safeName = sanitizeFileName(file?.name);
+  const path = `matriculas/${schoolSegment}/${alunoSlug}/${folder}/${Date.now()}-${safeName}`;
+  const ref = storageRef(storage, path);
+  await uploadBytes(ref, file, { contentType: file?.type || "application/octet-stream" });
+  const url = await getDownloadURL(ref);
+  return {
+    nome: file?.name || safeName,
+    url,
+    caminho: path,
+    tipo: file?.type || null,
+    tamanho: file?.size || 0,
+    uploaded_at: new Date().toISOString()
+  };
+}
+
+function clearMatriculaPhotoPreview() {
+  const preview = document.getElementById("matFotoPreview");
+  if (capturedMatriculaPhotoPreviewUrl) {
+    URL.revokeObjectURL(capturedMatriculaPhotoPreviewUrl);
+    capturedMatriculaPhotoPreviewUrl = null;
+  }
+  if (preview) {
+    preview.src = "";
+    preview.classList.add("hidden");
+  }
+}
+
+function resetCapturedMatriculaPhoto() {
+  capturedMatriculaPhotoFile = null;
+  clearMatriculaPhotoPreview();
+  const uploadStatus = document.getElementById("matUploadStatus");
+  if (uploadStatus) uploadStatus.textContent = "Foto removida. Capture novamente ou selecione um arquivo.";
+}
+
+function stopMatriculaCamera() {
+  if (matriculaCameraStream) {
+    matriculaCameraStream.getTracks().forEach((track) => track.stop());
+    matriculaCameraStream = null;
+  }
+  const video = document.getElementById("matCameraVideo");
+  const panel = document.getElementById("matCameraPanel");
+  if (video) video.srcObject = null;
+  if (panel) panel.classList.add("hidden");
+}
+
+async function openMatriculaCamera() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert("Seu navegador nao suporta acesso a camera.");
+    return;
+  }
+  try {
+    stopMatriculaCamera();
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+    matriculaCameraStream = stream;
+    const video = document.getElementById("matCameraVideo");
+    const panel = document.getElementById("matCameraPanel");
+    if (video) {
+      video.srcObject = stream;
+      await video.play();
+    }
+    if (panel) panel.classList.remove("hidden");
+  } catch (error) {
+    console.error(error);
+    alert("Nao foi possivel abrir a camera. Verifique a permissao no navegador.");
+  }
+}
+
+async function captureMatriculaPhotoFromCamera() {
+  const video = document.getElementById("matCameraVideo");
+  const canvas = document.getElementById("matCameraCanvas");
+  const uploadStatus = document.getElementById("matUploadStatus");
+  if (!video || !canvas || !matriculaCameraStream) {
+    alert("Abra a camera antes de capturar a foto.");
+    return;
+  }
+
+  const width = video.videoWidth || 1280;
+  const height = video.videoHeight || 720;
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.drawImage(video, 0, 0, width, height);
+
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
+  if (!blob) {
+    alert("Falha ao capturar foto da camera.");
+    return;
+  }
+
+  capturedMatriculaPhotoFile = new File([blob], `foto-aluno-${Date.now()}.jpg`, { type: "image/jpeg" });
+  clearMatriculaPhotoPreview();
+  const preview = document.getElementById("matFotoPreview");
+  if (preview) {
+    capturedMatriculaPhotoPreviewUrl = URL.createObjectURL(blob);
+    preview.src = capturedMatriculaPhotoPreviewUrl;
+    preview.classList.remove("hidden");
+  }
+  if (uploadStatus) uploadStatus.textContent = "Foto capturada pela camera.";
 }
 
 function agendaIdFor(aluno, data) {
@@ -116,6 +748,7 @@ function isFamilyOnlyRole() {
 function applyRoleLayout() {
   const cards = Array.from(mainGrid.querySelectorAll(":scope > .card"));
   const familyOnly = isFamilyOnlyRole();
+  const superadminVisible = isSuperAdmin();
   
   // Mostrar/ocultar dashboard da família
   if (familyDashboard) {
@@ -130,7 +763,19 @@ function applyRoleLayout() {
   } else {
     // Para staff, manter a secao ativa definida pela navegacao lateral.
     const activeItem = document.querySelector(".nav-item.active");
-    const activeSection = activeItem ? activeItem.getAttribute("data-section") : "agenda";
+    let activeSection = activeItem ? activeItem.getAttribute("data-section") : "agenda";
+
+    // Evita carregar tela de superadmin para perfis nao-superadmin
+    // quando esse item ficou ativo em uma sessao anterior.
+    if (!superadminVisible && activeSection === "superadmin") {
+      document.querySelectorAll(".nav-item").forEach((item) => item.classList.remove("active"));
+      const agendaItem = document.querySelector('.nav-item[data-section="agenda"]');
+      if (agendaItem) {
+        agendaItem.classList.add("active");
+      }
+      activeSection = "agenda";
+    }
+
     if (typeof window.showSection === "function") {
       window.showSection(activeSection);
     }
@@ -144,6 +789,16 @@ function applyRoleLayout() {
   });
   document.querySelectorAll(".family-only").forEach((element) => {
     element.style.display = canUseAgendaFamily() ? "block" : "none";
+  });
+  document.querySelectorAll(".superadmin-nav-only").forEach((element) => {
+    element.style.display = superadminVisible ? "block" : "none";
+  });
+
+  document.querySelectorAll(".card.superadmin-only").forEach((element) => {
+    // Cards seguem a secao ativa; apenas escondemos quando nao e superadmin.
+    if (!superadminVisible) {
+      element.style.display = "none";
+    }
   });
 }
 
@@ -473,11 +1128,51 @@ function attachList(collectionName, containerId, draw, options = {}) {
 
 function attachUiHandlers() {
   document.getElementById("agendaData").value = todayString();
+  populateDirectorSchoolOptions();
+  populateAccUserOptions();
+  populateProfessorOptions();
+  populateFaixaEtariaOptions();
   setAgendaMode();
   applyRoleLayout();
 
+  document.getElementById("btnBuscarCep")?.addEventListener("click", async () => {
+    await buscarEnderecoPorCep();
+  });
+  document.getElementById("btnAbrirCamera")?.addEventListener("click", async () => {
+    await openMatriculaCamera();
+  });
+  document.getElementById("btnCapturarFoto")?.addEventListener("click", async () => {
+    await captureMatriculaPhotoFromCamera();
+  });
+  document.getElementById("btnRepetirFoto")?.addEventListener("click", () => {
+    resetCapturedMatriculaPhoto();
+  });
+  document.getElementById("btnFecharCamera")?.addEventListener("click", () => {
+    stopMatriculaCamera();
+  });
+  document.getElementById("matFotoAluno")?.addEventListener("change", () => {
+    if (document.getElementById("matFotoAluno")?.files?.length) {
+      resetCapturedMatriculaPhoto();
+    }
+  });
+  document.getElementById("matCep")?.addEventListener("blur", async () => {
+    const cepField = document.getElementById("matCep");
+    if (!cepField) return;
+    const cep = normalizeCep(cepField.value);
+    cepField.value = formatCep(cep);
+    if (cep.length === 8) {
+      await buscarEnderecoPorCep();
+    }
+  });
+
   document.getElementById("agendaAluno").addEventListener("change", syncAgendaBinding);
   document.getElementById("agendaAluno").addEventListener("blur", syncAgendaBinding);
+  document.getElementById("matRespEmail")?.addEventListener("change", syncResponsibleUidFromEmail);
+  document.getElementById("matRespEmail")?.addEventListener("blur", syncResponsibleUidFromEmail);
+  document.getElementById("accUserSelect")?.addEventListener("change", (event) => {
+    const uidField = document.getElementById("accUid");
+    if (uidField) uidField.value = event.target.value || "";
+  });
 
   document.getElementById("btnAgenda").onclick = async () => {
     await saveAgenda();
@@ -740,15 +1435,61 @@ function attachUiHandlers() {
     const aluno = document.getElementById("matAluno").value.trim();
     const responsavel = document.getElementById("matResp").value.trim();
     const turma = document.getElementById("matTurma").value.trim();
+    if (!aluno) {
+      alert("Informe o nome do aluno.");
+      return;
+    }
+
+    await syncResponsibleUidFromEmail();
     const responsavelUid = document.getElementById("matRespUid").value.trim();
     const responsavelEmail = document.getElementById("matRespEmail").value.trim();
+    const uploadStatus = document.getElementById("matUploadStatus");
+    const alunoSlug = slugify(aluno) || `aluno-${Date.now()}`;
+    const documentosInput = document.getElementById("matDocumentos");
+    const fotoInput = document.getElementById("matFotoAluno");
+    const documentosFiles = Array.from(documentosInput?.files || []);
+    const fotoFile = fotoInput?.files?.[0] || capturedMatriculaPhotoFile || null;
+
+    const uploadedDocs = [];
+    let fotoAluno = null;
+
+    if (uploadStatus) uploadStatus.textContent = "";
+    if (uploadStatus && (documentosFiles.length || fotoFile)) {
+      uploadStatus.textContent = "Enviando arquivos...";
+    }
+
+    for (const file of documentosFiles) {
+      const docUpload = await uploadMatriculaFile(file, { alunoSlug, folder: "documentos" });
+      uploadedDocs.push(docUpload);
+    }
+    if (fotoFile) {
+      fotoAluno = await uploadMatriculaFile(fotoFile, { alunoSlug, folder: "foto" });
+    }
+
+    if (uploadStatus && (documentosFiles.length || fotoFile)) {
+      uploadStatus.textContent = "Arquivos enviados com sucesso.";
+    }
+
+    const endereco = {
+      cep: normalizeCep(document.getElementById("matCep").value),
+      logradouro: document.getElementById("matLogradouro").value.trim(),
+      numero: document.getElementById("matNumero").value.trim(),
+      complemento: document.getElementById("matComplemento").value.trim(),
+      bairro: document.getElementById("matBairro").value.trim(),
+      cidade: document.getElementById("matCidade").value.trim(),
+      uf: document.getElementById("matUf").value.trim().toUpperCase(),
+      referencia: document.getElementById("matReferencia").value.trim()
+    };
     const matriculaRef = await addDoc(collection(db, "matriculas"), withSchoolScope({
       aluno,
       responsavel,
       turma,
       responsavel_uid: responsavelUid || null,
       responsavel_email: responsavelEmail || null,
+      endereco,
       documentos_url: document.getElementById("matDocUrl").value.trim(),
+      documentos_upload: uploadedDocs,
+      foto_aluno: fotoAluno,
       contrato_assinado: document.getElementById("matContrato").checked,
       created_at: serverTimestamp(),
       created_by: auth.currentUser.uid
@@ -761,6 +1502,9 @@ function attachUiHandlers() {
         responsavel_nome: responsavel,
         responsavel_uid: responsavelUid || null,
         responsavel_email: responsavelEmail || null,
+        endereco_residencial: endereco,
+        foto_url: fotoAluno?.url || null,
+        documentos_upload: uploadedDocs,
         matricula_id: matriculaRef.id,
         updated_at: serverTimestamp(),
         updated_by: auth.currentUser.uid
@@ -769,6 +1513,11 @@ function attachUiHandlers() {
     );
     await audit("create", "matriculas");
     await audit("update", "alunos.vinculo_responsavel");
+    stopMatriculaCamera();
+    capturedMatriculaPhotoFile = null;
+    clearMatriculaPhotoPreview();
+    if (documentosInput) documentosInput.value = "";
+    if (fotoInput) fotoInput.value = "";
     showOk("okMat");
   };
 
@@ -792,7 +1541,7 @@ function attachUiHandlers() {
     }
     const uid = document.getElementById("accUid").value.trim();
     if (!uid) {
-      alert("Informe o UID do usuario.");
+      alert("Selecione um usuario na lista.");
       return;
     }
     await setDoc(
@@ -810,10 +1559,61 @@ function attachUiHandlers() {
     showOk("okAcesso");
   };
 
+  document.getElementById("btnUsuarioCriar").onclick = async () => {
+    if (!isSuperUser() && !["superadmin", "admin", "direcao"].includes(currentProfile.role || "")) {
+      alert("Somente direcao/admin pode criar usuarios.");
+      return;
+    }
+
+    const nome = document.getElementById("newUserName").value.trim();
+    const email = document.getElementById("newUserEmail").value.trim();
+    const role = document.getElementById("newUserRole").value;
+    if (!nome || !email || !role) {
+      alert("Informe nome, email e perfil para criar o usuario.");
+      return;
+    }
+
+    const response = await criarUsuarioEscolaFn({
+      nome,
+      email,
+      role,
+      escolaId: document.getElementById("accEscola")?.value.trim() || currentSchoolId() || null,
+      senhaTemporaria: document.getElementById("newUserPassword").value.trim() || null
+    });
+    const data = response.data || {};
+    const generatedPassword = data.temporaryPassword || document.getElementById("newUserPassword").value.trim() || "-";
+
+    document.getElementById("accUid").value = data.uid || "";
+    document.getElementById("newUserPassword").value = generatedPassword === "-" ? "" : generatedPassword;
+    document.getElementById("okUsuarioCriado").textContent = `Usuario criado: ${email} | Senha temporaria: ${generatedPassword}`;
+    showOk("okUsuarioCriado");
+  };
+
+  document.getElementById("btnFaixaCriar").onclick = async () => {
+    const nome = document.getElementById("faixaNome").value.trim();
+    const descricao = document.getElementById("faixaDescricao").value.trim();
+    if (!nome) {
+      alert("Informe o nome da faixa etaria.");
+      return;
+    }
+    const faixaId = slugify(nome) || `faixa-${Date.now()}`;
+    await setDoc(doc(db, "faixas_etarias", faixaId), withSchoolScope({
+      nome,
+      descricao,
+      created_at: serverTimestamp(),
+      created_by: auth.currentUser.uid
+    }), { merge: true });
+    await audit("create", "faixas_etarias");
+    document.getElementById("faixaNome").value = "";
+    document.getElementById("faixaDescricao").value = "";
+    showOk("okFaixa");
+  };
+
   document.getElementById("btnTurma").onclick = async () => {
     await addDoc(collection(db, "turmas"), withSchoolScope({
       nome: document.getElementById("turmaNome").value.trim(),
       faixa_etaria: document.getElementById("turmaFaixa").value.trim(),
+      faixa_etaria_id: document.getElementById("turmaFaixa").value.trim(),
       limite_alunos: Number(document.getElementById("turmaLimite").value || 0),
       professor_uid: document.getElementById("turmaProf").value.trim(),
       created_at: serverTimestamp(),
@@ -849,6 +1649,148 @@ function attachUiHandlers() {
     await audit("create", "lgpd_consentimentos");
     showOk("okLgpd");
   };
+
+  document.getElementById("btnSchoolSave").onclick = async () => {
+    if (!isSuperAdmin()) {
+      alert("Acesso restrito ao superadmin.");
+      return;
+    }
+    const schoolId = document.getElementById("schoolId").value.trim();
+    const schoolName = document.getElementById("schoolName").value.trim();
+    if (!schoolId || !schoolName) {
+      alert("Informe o ID e o nome da escola.");
+      return;
+    }
+    const existingSchool = await getDoc(doc(db, "escolas", schoolId));
+    const payload = {
+      escola_id: schoolId,
+      nome: schoolName,
+      cidade: document.getElementById("schoolCity").value.trim(),
+      status: document.getElementById("schoolStatus").value,
+      updated_at: serverTimestamp(),
+      updated_by: auth.currentUser.uid
+    };
+    if (!existingSchool.exists()) {
+      payload.created_at = serverTimestamp();
+      payload.created_by = auth.currentUser.uid;
+    }
+    await setDoc(doc(db, "escolas", schoolId), payload, { merge: true });
+    await audit(selectedSchoolId ? "update" : "create", "escolas");
+    showOk("okSchool");
+  };
+
+  document.getElementById("btnSchoolClear").onclick = clearSchoolForm;
+  document.getElementById("btnSchoolInactivate").onclick = async () => {
+    if (!isSuperAdmin()) {
+      alert("Acesso restrito ao superadmin.");
+      return;
+    }
+    if (!document.getElementById("schoolId").value.trim()) {
+      alert("Selecione ou informe uma escola.");
+      return;
+    }
+    if (!confirm("Tem certeza que deseja inativar esta escola?")) {
+      return;
+    }
+    setSchoolStatus("inativa");
+    await document.getElementById("btnSchoolSave").onclick();
+  };
+
+  document.getElementById("btnDirectorCreate").onclick = async () => {
+    if (!isSuperAdmin()) {
+      alert("Acesso restrito ao superadmin.");
+      return;
+    }
+    const payload = {
+      uid: null,
+      nome: document.getElementById("directorName").value.trim(),
+      email: document.getElementById("directorEmail").value.trim(),
+      escolaId: document.getElementById("directorSchoolId").value.trim(),
+      senhaTemporaria: document.getElementById("directorTempPassword").value.trim() || null,
+      status: document.getElementById("directorStatus").value
+    };
+    const response = await criarDiretorEscolaFn(payload);
+    const data = response.data || {};
+    document.getElementById("directorUid").value = data.uid || payload.uid || "";
+    document.getElementById("directorTempPassword").value = data.temporaryPassword || payload.senhaTemporaria || "";
+    document.getElementById("okDirector").textContent = `Diretor cadastrado com sucesso. Senha temporaria: ${data.temporaryPassword || payload.senhaTemporaria || "-"}`;
+    showOk("okDirector");
+  };
+
+  document.getElementById("btnDirectorSave").onclick = async () => {
+    if (!isSuperAdmin()) {
+      alert("Acesso restrito ao superadmin.");
+      return;
+    }
+    const uid = document.getElementById("directorUid").value.trim();
+    if (!uid) {
+      alert("Cadastre ou selecione um diretor para salvar alteracoes.");
+      return;
+    }
+    await setDoc(
+      doc(db, "usuarios", uid),
+      {
+        uid,
+        nome: document.getElementById("directorName").value.trim(),
+        email: document.getElementById("directorEmail").value.trim(),
+        role: "direcao",
+        escola_id: document.getElementById("directorSchoolId").value.trim(),
+        status: document.getElementById("directorStatus").value,
+        updated_at: serverTimestamp(),
+        updated_by: auth.currentUser.uid
+      },
+      { merge: true }
+    );
+    await audit("update", "diretores");
+    showOk("okDirector");
+  };
+
+  document.getElementById("btnDirectorClear").onclick = clearDirectorForm;
+  document.getElementById("btnDirectorResetPassword").onclick = async () => {
+    if (!isSuperAdmin()) {
+      alert("Acesso restrito ao superadmin.");
+      return;
+    }
+    const uid = document.getElementById("directorUid").value.trim();
+    if (!uid) {
+      alert("Cadastre ou selecione um diretor para redefinir a senha.");
+      return;
+    }
+    const response = await resetDiretorSenhaFn({
+      uid,
+      password: document.getElementById("directorTempPassword").value.trim() || null
+    });
+    const data = response.data || {};
+    document.getElementById("directorTempPassword").value = data.temporaryPassword || "";
+    document.getElementById("okDirector").textContent = `Senha redefinida com sucesso. Nova senha: ${data.temporaryPassword || "-"}`;
+    showOk("okDirector");
+  };
+
+  document.getElementById("btnDirectorToggleStatus").onclick = async () => {
+    if (!isSuperAdmin()) {
+      alert("Acesso restrito ao superadmin.");
+      return;
+    }
+    const uid = document.getElementById("directorUid").value.trim();
+    if (!uid) {
+      alert("Cadastre ou selecione um diretor para alterar status.");
+      return;
+    }
+    const nextStatus = document.getElementById("directorStatus").value === "ativo" ? "inativo" : "ativo";
+    if (!confirm(`Tem certeza que deseja marcar este diretor como ${nextStatus}?`)) {
+      return;
+    }
+    const response = await setDiretorStatusFn({ uid, status: nextStatus });
+    const data = response.data || {};
+    setDirectorStatusField(data.status || nextStatus);
+    document.getElementById("okDirector").textContent = `Diretor ${data.status || nextStatus} com sucesso.`;
+    showOk("okDirector");
+  };
+
+  document.getElementById("schoolSearch")?.addEventListener("input", renderSuperadminSchools);
+  document.getElementById("directorSearch")?.addEventListener("input", renderSuperadminDirectors);
+  document.getElementById("schoolCityFilter")?.addEventListener("input", updateSuperadminSummary);
+  document.getElementById("schoolSortMetric")?.addEventListener("change", updateSuperadminSummary);
 }
 
 function attachLists() {
@@ -1007,8 +1949,12 @@ function attachLists() {
       `Matricula - ${data.aluno || "aluno"}`,
       [
         `Responsavel: ${data.responsavel || "-"}`,
-        `UID responsavel: ${data.responsavel_uid || "-"}`,
+        `Responsavel vinculado: ${data.responsavel_nome || data.responsavel || "-"}`,
         `Turma: ${data.turma || "-"}`,
+        `Foto do aluno: ${data.foto_aluno?.url ? "enviada" : "nao enviada"}`,
+        `Documentos anexados: ${Array.isArray(data.documentos_upload) ? data.documentos_upload.length : 0}`,
+        `Endereco: ${(data.endereco?.logradouro || "-")}${data.endereco?.numero ? `, ${data.endereco.numero}` : ""} - ${data.endereco?.bairro || "-"}`,
+        `Cidade/UF: ${data.endereco?.cidade || "-"}/${data.endereco?.uf || "-"} | CEP: ${formatCep(data.endereco?.cep || "") || "-"}`,
         `Contrato assinado: ${data.contrato_assinado ? "sim" : "nao"}`
       ],
       data.created_at
@@ -1020,7 +1966,7 @@ function attachLists() {
       [
         `Turma: ${data.turma || "-"}`,
         `Responsavel: ${data.responsavel_nome || "-"}`,
-        `UID vinculado: ${data.responsavel_uid || "-"}`
+        `Email do responsavel: ${data.responsavel_email || "-"}`
       ],
       data.updated_at || data.created_at
     )
@@ -1032,9 +1978,27 @@ function attachLists() {
   attachList(
     "usuarios",
     "listUsuarios",
-    (id, data) => renderItem(`Usuario - ${data.email || id}`, [`UID: ${id}`, `Perfil: ${data.role || "-"}`], data.updated_at || data.created_at),
+    (id, data) => renderItem(`Usuario - ${data.email || id}`, [`Identificador: ${id}`, `Perfil: ${data.role || "-"}`], data.updated_at || data.created_at),
     { orderByField: "updated_at" }
   );
+  const renderFaixasEtarias = () => {
+    const list = document.getElementById("listFaixas");
+    if (!list) return;
+    list.innerHTML = "";
+    const faixas = cachedFaixasEtarias
+      .map(({ id, data }) => ({ id, nome: data.nome || id, descricao: data.descricao || "" }))
+      .sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+    if (faixas.length === 0) {
+      list.innerHTML = "<p class=\"small\">Nenhuma faixa etaria cadastrada.</p>";
+      return;
+    }
+    faixas.forEach(({ id, nome, descricao }) => {
+      const item = renderItem(`Faixa - ${nome}`, descricao ? [descricao] : [], null);
+      list.appendChild(item);
+    });
+  };
+  renderFaixasEtarias();
+
   attachList("turmas", "listTurmas", (_, data) =>
     renderItem(`Turma - ${data.nome || "-"}`, [`Faixa: ${data.faixa_etaria || "-"}`, `Limite: ${data.limite_alunos || 0}`], data.created_at)
   );
@@ -1084,6 +2048,45 @@ function attachLists() {
     }
   });
   detachListeners.push(offCaixa);
+
+  if (isSuperUser()) {
+    const offEscolas = onSnapshot(scopedCollectionQuery("escolas", [limit(100)]), (snap) => {
+      cachedSchools = snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }));
+      populateDirectorSchoolOptions();
+      renderSuperadminSchools();
+    });
+    detachListeners.push(offEscolas);
+  }
+
+  const offDiretores = onSnapshot(scopedCollectionQuery("usuarios", [limit(200)]), (snap) => {
+    cachedUsers = snap.docs
+      .map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }));
+    cachedDirectors = cachedUsers
+      .filter(({ data }) => data.role === "direcao");
+    populateAccUserOptions();
+    populateProfessorOptions();
+    renderSuperadminDirectors();
+  });
+  detachListeners.push(offDiretores);
+
+  const offFaixas = onSnapshot(scopedCollectionQuery("faixas_etarias", [limit(100)]), (snap) => {
+    cachedFaixasEtarias = snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }));
+    populateFaixaEtariaOptions();
+    renderFaixasEtarias();
+  });
+  detachListeners.push(offFaixas);
+
+  const offStudentsSummary = onSnapshot(scopedCollectionQuery("alunos", [limit(500)]), (snap) => {
+    cachedStudents = snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }));
+    updateSuperadminSummary();
+  });
+  detachListeners.push(offStudentsSummary);
+
+  const offEnrollmentsSummary = onSnapshot(scopedCollectionQuery("matriculas", [limit(500)]), (snap) => {
+    cachedEnrollments = snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }));
+    updateSuperadminSummary();
+  });
+  detachListeners.push(offEnrollmentsSummary);
 }
 
 function attachKpiOnly() {
@@ -1141,8 +2144,14 @@ btnLogout.addEventListener("click", () => {
 onAuthStateChanged(auth, async (user) => {
   clearListeners();
   if (!user) {
+    stopMatriculaCamera();
+    capturedMatriculaPhotoFile = null;
+    clearMatriculaPhotoPreview();
     loginScreen.style.display = "flex";
     dashboardScreen.style.display = "none";
+    if (schoolHeaderName) {
+      schoolHeaderName.textContent = "Portal Escolar";
+    }
     emailInput.value = "";
     passwordInput.value = "";
     return;
@@ -1154,12 +2163,13 @@ onAuthStateChanged(auth, async (user) => {
       throw new Error("Usuario sem escola vinculada. Defina escola_id no perfil.");
     }
     if (userDisplay) {
-      userDisplay.textContent = `Ola, ${user.email}`;
+      userDisplay.textContent = `Ola, ${resolveUserFirstName(user)}`;
     }
     if (userRole) {
       const schoolLabel = currentSchoolId() || "sem escola";
       userRole.textContent = `Perfil: ${currentProfile.role || "coordenacao"} | Escola: ${schoolLabel}`;
     }
+    updateSchoolHeaderName();
     loginScreen.style.display = "none";
     dashboardScreen.style.display = "block";
     attachUiHandlers();
