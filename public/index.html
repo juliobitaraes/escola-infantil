@@ -342,7 +342,7 @@
                         <div class="card-head" style="background:#8e44ad;">Administrativo - Matriculas</div>
                         <div class="card-body">
                             <input id="matAluno" class="field" placeholder="Aluno">
-                            <div class="row"><input id="matResp" class="field" placeholder="Responsavel"><input id="matTurma" class="field" placeholder="Turma do aluno"></div>
+                            <div class="row"><input id="matResp" class="field" placeholder="Responsavel"><select id="matTurma" class="field"><option value="">Turma do aluno</option></select></div>
                             <div class="row"><input id="matRespUid" class="field" placeholder="Identificador do responsavel (automatico)" readonly><input id="matRespEmail" class="field" placeholder="Email do responsavel"></div>
                             <div class="row">
                                 <input id="matCep" class="field" placeholder="CEP">
@@ -353,8 +353,9 @@
                             <div class="row"><input id="matBairro" class="field" placeholder="Bairro"><input id="matCidade" class="field" placeholder="Cidade"></div>
                             <div class="row"><input id="matUf" class="field" placeholder="UF" maxlength="2"><input id="matReferencia" class="field" placeholder="Ponto de referencia"></div>
                             <input id="matDocUrl" class="field" placeholder="URL documentos (opcional)">
-                            <label>Upload de documentos</label>
-                            <input id="matDocumentos" class="field" type="file" multiple>
+                            <label>Upload de documentos (PDF/JPG/PNG, multiplos, ate 20 MB por arquivo)</label>
+                            <input id="matDocumentos" class="field" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png">
+                            <div id="matSelectedDocs" class="small" style="margin-top: -6px; margin-bottom: 10px;">Nenhum arquivo selecionado.</div>
                             <label>Foto do aluno</label>
                             <input id="matFotoAluno" class="field" type="file" accept="image/*">
                             <div class="row">
@@ -372,6 +373,9 @@
                             </div>
                             <img id="matFotoPreview" class="camera-preview hidden" alt="Preview da foto do aluno">
                             <canvas id="matCameraCanvas" class="hidden"></canvas>
+                            <div id="matUploadProgressWrap" class="upload-progress hidden" aria-hidden="true">
+                                <div id="matUploadProgressBar" class="upload-progress-bar"></div>
+                            </div>
                             <p class="small" id="matUploadStatus"></p>
                             <label><input id="matContrato" type="checkbox"> Contrato assinado digitalmente</label>
                             <button class="btn" id="btnMatricula" style="display:block;margin-top:10px;">Salvar matricula</button>
@@ -427,14 +431,7 @@
                     <section class="card">
                         <div class="card-head" style="background:#6f3590;">Administrativo - Turmas</div>
                         <div class="card-body">
-                            <h4 style="margin-top: 0; margin-bottom: 16px; color: var(--heading);">Cadastro de faixas etarias</h4>
-                            <input id="faixaNome" class="field" placeholder="Nome da faixa etaria (ex: 2-3 anos)">
-                            <input id="faixaDescricao" class="field" placeholder="Descricao (opcional)">
-                            <button class="btn" id="btnFaixaCriar" style="margin-bottom: 12px;">Criar faixa etaria</button>
-                            <p class="ok" id="okFaixa">Faixa etaria criada.</p>
-                            <div id="listFaixas" class="list" style="margin-bottom: 20px;"></div>
-
-                            <h4 style="margin-top: 16px; margin-bottom: 12px; color: var(--heading);">Cadastro de turmas</h4>
+                            <h4 style="margin-top: 0; margin-bottom: 12px; color: var(--heading);">Cadastro de turmas</h4>
                             <input id="turmaNome" class="field" placeholder="Nome turma">
                             <div class="row"><select id="turmaFaixa" class="field"><option value="">Selecione a faixa etaria</option></select><input id="turmaLimite" class="field" type="number" placeholder="Limite de alunos"></div>
                             <select id="turmaProf" class="field">
@@ -442,7 +439,14 @@
                             </select>
                             <button class="btn btn-secondary" id="btnTurma">Salvar turma</button>
                             <p class="ok" id="okTurma">Turma salva.</p>
-                            <div id="listTurmas" class="list"></div>
+                            <div id="listTurmas" class="list" style="margin-bottom: 20px;"></div>
+
+                            <h4 style="margin-top: 16px; margin-bottom: 16px; color: var(--heading);">Cadastro de faixas etarias</h4>
+                            <input id="faixaNome" class="field" placeholder="Nome da faixa etaria (ex: 2-3 anos)">
+                            <input id="faixaDescricao" class="field" placeholder="Descricao (opcional)">
+                            <button class="btn" id="btnFaixaCriar" style="margin-bottom: 12px;">Criar faixa etaria</button>
+                            <p class="ok" id="okFaixa">Faixa etaria criada.</p>
+                            <div id="listFaixas" class="list"></div>
                         </div>
                     </section>
 
@@ -679,7 +683,7 @@
         const activeItem = document.querySelector('.nav-item.active');
         showSection(activeItem ? activeItem.getAttribute('data-section') : 'agenda');
     </script>
-    <script type="module" src="assets/js/app.js"></script>
-    <script src="assets/js/help.js"></script>
+    <script type="module" src="assets/js/app.js?v=20260514"></script>
+    <script src="assets/js/help.js?v=20260514"></script>
 </body>
 </html>

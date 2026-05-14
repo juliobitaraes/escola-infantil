@@ -58,6 +58,173 @@ function requireUserManagementRole(context) {
   }
 }
 
+function getBearerToken(request) {
+  const header = String(request.headers.authorization || request.headers.Authorization || "");
+  if (!header.startsWith("Bearer ")) {
+    return null;
+  }
+  return header.slice(7).trim();
+}
+
+async function getStorageUserContext(request) {
+  const token = getBearerToken(request);
+  if (!token) {
+    throw new HttpsError("unauthenticated", "Token de autenticacao ausente.");
+  }
+
+  const decoded = await admin.auth().verifyIdToken(token);
+  const uid = decoded.uid;
+  const email = decoded.email || null;
+  const context = await getUserContext(uid, email);
+  return { uid, email, context };
+}
+
+function getStorageBucket() {
+  return admin.storage().bucket();
+}
+
+function buildMatriculaStoragePath({ schoolId, studentSlug, folder, fileName }) {
+  return `matriculas/${schoolId}/${studentSlug}/${folder}/${Date.now()}-${fileName}`;
+}
+
+exports.uploadMatriculaDocumento = onRequest({ region: "southamerica-east1", cors: true }, async (request, response) => {
+  if (request.method === "OPTIONS") {
+    response.status(204).send("");
+    return;
+  }
+
+  if (request.method !== "POST") {
+    response.status(405).json({ ok: false, error: "method not allowed" });
+    return;
+  }
+
+  try {
+    const { uid, email, context } = await getStorageUserContext(request);
+    if (!context.escolaId) {
+      throw new HttpsError("failed-precondition", "Usuario sem escola vinculada.");
+    }
+    if (!context.role || !["superadmin", "admin", "direcao", "coordenacao", "secretaria"].includes(context.role)) {
+      throw new HttpsError("permission-denied", "Sem permissao para upload de documentos.");
+    }
+
+    const schoolId = String(request.query.schoolId || "").trim();
+    const studentSlug = String(request.query.studentSlug || "").trim();
+    const folder = String(request.query.folder || "documentos").trim();
+    const fileName = String(request.query.fileName || "arquivo").trim();
+    const contentType = String(request.headers["content-type"] || "application/octet-stream");
+
+    if (!schoolId || !studentSlug || !folder || !fileName) {
+      response.status(400).json({ ok: false, error: "missing parameters" });
+      return;
+    }
+
+    if (!context.superuser && schoolId !== context.escolaId) {
+      response.status(403).json({ ok: false, error: "wrong school" });
+      return;
+    }
+
+    const body = request.body || {};
+    const fileData = String(body.fileData || "").trim();
+    const rawBase64 = fileData.includes(",") ? fileData.split(",").pop() : fileData;
+    const buffer = rawBase64 ? Buffer.from(rawBase64, "base64") : (request.rawBody || Buffer.alloc(0));
+    if (!buffer.length) {
+      response.status(400).json({ ok: false, error: "empty body" });
+      return;
+    }
+
+    const safeName = String(fileName)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9._-]/g, "-")
+      .replace(/-+/g, "-")
+      .slice(0, 120);
+    const path = buildMatriculaStoragePath({ schoolId, studentSlug, folder, fileName: safeName });
+    const token = crypto.randomUUID();
+    const file = getStorageBucket().file(path);
+    await file.save(buffer, {
+      metadata: {
+        contentType,
+        metadata: {
+          firebaseStorageDownloadTokens: token
+        }
+      },
+      resumable: false
+    });
+
+    const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${getStorageBucket().name}/o/${encodeURIComponent(path)}?alt=media&token=${token}`;
+
+    await writeAudit({
+      action: "create",
+      area: "storage.matricula_upload",
+      uid,
+      email,
+      escolaId: schoolId,
+      details: { path, folder, fileName: safeName, size: buffer.length }
+    });
+
+    response.json({ ok: true, path, url: downloadUrl, name: safeName, size: buffer.length, contentType });
+  } catch (error) {
+    logger.error("uploadMatriculaDocumento error", error);
+    const message = error instanceof HttpsError ? error.message : (error && error.message ? error.message : "Erro no upload do documento.");
+    const status = error instanceof HttpsError
+      ? (error.code === "permission-denied" ? 403 : 400)
+      : 500;
+    response.status(status).json({ ok: false, error: message });
+  }
+});
+
+exports.deleteMatriculaDocumento = onRequest({ region: "southamerica-east1", cors: true }, async (request, response) => {
+  if (request.method === "OPTIONS") {
+    response.status(204).send("");
+    return;
+  }
+
+  if (request.method !== "POST") {
+    response.status(405).json({ ok: false, error: "method not allowed" });
+    return;
+  }
+
+  try {
+    const { uid, context } = await getStorageUserContext(request);
+    if (!context.escolaId) {
+      throw new HttpsError("failed-precondition", "Usuario sem escola vinculada.");
+    }
+    if (!context.role || !["superadmin", "admin", "direcao", "coordenacao", "secretaria"].includes(context.role)) {
+      throw new HttpsError("permission-denied", "Sem permissao para excluir documentos.");
+    }
+
+    const { path, schoolId } = request.body || {};
+    const storagePath = String(path || "").trim();
+    const bodySchoolId = String(schoolId || "").trim();
+    if (!storagePath || !bodySchoolId) {
+      response.status(400).json({ ok: false, error: "missing parameters" });
+      return;
+    }
+
+    if (!context.superuser && bodySchoolId !== context.escolaId) {
+      response.status(403).json({ ok: false, error: "wrong school" });
+      return;
+    }
+
+    await getStorageBucket().file(storagePath).delete({ ignoreNotFound: true });
+
+    await writeAudit({
+      action: "delete",
+      area: "storage.matricula_delete",
+      uid,
+      email: context.email,
+      escolaId: bodySchoolId,
+      details: { path: storagePath }
+    });
+
+    response.json({ ok: true, path: storagePath });
+  } catch (error) {
+    logger.error("deleteMatriculaDocumento error", error);
+    const message = error instanceof HttpsError ? error.message : "Erro ao excluir documento.";
+    response.status(error instanceof HttpsError && error.code === "permission-denied" ? 403 : 500).json({ ok: false, error: message });
+  }
+});
+
 function generateTemporaryPassword() {
   return crypto.randomBytes(8).toString("hex");
 }
