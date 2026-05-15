@@ -465,6 +465,85 @@ textarea:focus-visible,
     border-color: color-mix(in srgb, var(--success) 70%, var(--border-dark) 30%);
 }
 
+.prontuario-doc-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1px solid color-mix(in srgb, var(--primary-light) 35%, var(--border-dark) 65%);
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(112, 55, 142, 0.14) 0%, rgba(0, 0, 0, 0.08) 100%);
+}
+
+.prontuario-doc-section-matricula {
+    border-color: color-mix(in srgb, var(--primary-light) 42%, var(--border-dark) 58%);
+    background: linear-gradient(180deg, rgba(112, 55, 142, 0.14) 0%, rgba(49, 101, 164, 0.08) 100%);
+}
+
+.prontuario-doc-section-upload {
+    border-color: color-mix(in srgb, var(--success) 40%, var(--border-dark) 60%);
+    background: linear-gradient(180deg, rgba(24, 147, 115, 0.18) 0%, rgba(0, 0, 0, 0.08) 100%);
+}
+
+.prontuario-doc-section-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--primary-light) 84%, white 16%);
+}
+
+.prontuario-doc-section-title::before {
+    content: "";
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--primary), var(--accent-light));
+    box-shadow: 0 0 0 3px rgba(112, 55, 142, 0.15);
+}
+
+.prontuario-doc-section-upload .prontuario-doc-section-title::before {
+    background: linear-gradient(135deg, var(--success), var(--accent-light));
+    box-shadow: 0 0 0 3px rgba(24, 147, 115, 0.16);
+}
+
+.prontuario-doc-section-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.prontuario-doc-section-empty {
+    opacity: 0.9;
+}
+
+.prontuario-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 10px 0 12px;
+    padding: 14px;
+    border: 1px solid color-mix(in srgb, var(--primary-light) 32%, var(--border-dark) 68%);
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.10) 0%, rgba(112, 55, 142, 0.10) 100%);
+}
+
+.prontuario-preview-head {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.prontuario-preview-head strong {
+    color: var(--heading);
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
 .saved-doc-row {
     display: flex;
     justify-content: space-between;
@@ -475,6 +554,10 @@ textarea:focus-visible,
     border: 1px solid var(--border-dark);
     border-radius: 8px;
     background: rgba(0, 0, 0, 0.12);
+}
+
+.saved-doc-row-upload {
+    background: rgba(24, 147, 115, 0.08);
 }
 
 .saved-doc-actions {

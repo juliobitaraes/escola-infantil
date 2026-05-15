@@ -38,6 +38,7 @@ const setDiretorStatusFn = httpsCallable(functions, "setDiretorStatus");
 const SUPERUSER_EMAIL = "julio.bitaraes.mail@gmail.com";
 const STORAGE_UPLOAD_FUNCTION_URL = "https://uploadmatriculadocumento-ry5gli47hq-rj.a.run.app";
 const STORAGE_DELETE_FUNCTION_URL = "https://deletematriculadocumento-ry5gli47hq-rj.a.run.app";
+const STORAGE_SERVE_FUNCTION_URL = "https://southamerica-east1-escola-infantil-edu.cloudfunctions.net/serveMatriculaDocumento";
 
 const loginScreen = document.getElementById("login-screen");
 const dashboardScreen = document.getElementById("dashboard-screen");
@@ -70,6 +71,8 @@ let matriculaCameraStream = null;
 let capturedMatriculaPhotoFile = null;
 let capturedMatriculaPhotoPreviewUrl = null;
 let pendingMatriculaDocumentos = [];
+let pendingProntuarioDocumentos = [];
+let prontuarioPreviewRequestId = 0;
 let editingMatriculaId = null;
 
 function normalizeEmail(value) {
@@ -285,6 +288,193 @@ function populateMatriculaTurmaOptions() {
   if (previousValue && turmas.some((turma) => turma.nome === previousValue)) {
     turmaSelect.value = previousValue;
   }
+}
+
+function getProntuarioTurmas() {
+  return cachedTurmas
+    .map(({ id, data }) => ({
+      id,
+      nome: data.nome || id,
+      professorUid: data.professor_uid || data.professor_id || ""
+    }))
+    .sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+}
+
+function getProntuarioProfessores() {
+  const allowedRoles = new Set(["professor", "coordenacao", "direcao"]);
+  return cachedUsers
+    .filter(({ data }) => allowedRoles.has(data.role || ""))
+    .map(({ id, data }) => ({
+      id,
+      nome: data.nome || "",
+      email: data.email || id,
+      role: data.role || "-"
+    }))
+    .sort((a, b) => String(a.nome || a.email).localeCompare(String(b.nome || b.email)));
+}
+
+function getProntuarioAlunoCandidates() {
+  const turmaFiltro = document.getElementById("proTurmaFiltro")?.value.trim() || "";
+  const professorFiltro = document.getElementById("proProfessorFiltro")?.value.trim() || "";
+  const alunoBusca = normalizeSearch(document.getElementById("proAlunoBusca")?.value || "");
+  const turmasDoProfessor = professorFiltro
+    ? new Set(
+        getProntuarioTurmas()
+          .filter((turma) => turma.professorUid === professorFiltro)
+          .map((turma) => turma.nome)
+      )
+    : null;
+
+  return cachedStudents.filter(({ data }) => {
+    const turmaAluno = String(data.turma || "").trim();
+    const nomeAluno = normalizeSearch(data.nome || "");
+    if (turmaFiltro && turmaAluno !== turmaFiltro) return false;
+    if (turmasDoProfessor && !turmasDoProfessor.has(turmaAluno)) return false;
+    if (alunoBusca && !nomeAluno.includes(alunoBusca)) return false;
+    return true;
+  });
+}
+
+function normalizeDocumentoIdentity(documento = {}) {
+  return [String(documento?.url || ""), String(documento?.caminho || ""), String(documento?.nome || "")].join("::");
+}
+
+function mergeUniqueDocumentos(documentos = []) {
+  const result = [];
+  const seen = new Set();
+  documentos.forEach((documento) => {
+    const identity = normalizeDocumentoIdentity(documento);
+    if (seen.has(identity)) return;
+    seen.add(identity);
+    result.push(documento);
+  });
+  return result;
+}
+
+async function updateProntuarioDocumentosPreview() {
+  const container = document.getElementById("proDocumentosPreview");
+  if (!container) return;
+
+  const alunoNome = document.getElementById("proAluno")?.value.trim() || "";
+  if (!alunoNome || alunoNome === "Nenhum aluno encontrado") {
+    container.innerHTML = "<p class=\"small\">Selecione um aluno para ver os documentos já cadastrados.</p>";
+    return;
+  }
+
+  const requestId = ++prontuarioPreviewRequestId;
+  container.innerHTML = "<p class=\"small\">Carregando documentos já cadastrados...</p>";
+
+  try {
+    const alunoId = slugify(alunoNome);
+    const [matriculaSnap, prontuariosSnap] = await Promise.all([
+      alunoId ? getDoc(doc(db, "alunos", alunoId)) : Promise.resolve(null),
+      getDocs(scopedCollectionQuery("prontuarios", [where("aluno", "==", alunoNome), limit(50)]))
+    ]);
+
+    if (requestId !== prontuarioPreviewRequestId) return;
+
+    const matriculaData = matriculaSnap && typeof matriculaSnap.exists === "function" && matriculaSnap.exists() ? matriculaSnap.data() || {} : {};
+    const documentosMatricula = Array.isArray(matriculaData.documentos_upload) ? matriculaData.documentos_upload : [];
+    const documentosProntuario = [];
+
+    prontuariosSnap.forEach((docSnap) => {
+      const data = docSnap.data() || {};
+      if (Array.isArray(data.documentos_upload)) {
+        documentosProntuario.push(...data.documentos_upload);
+      }
+    });
+
+    const prontuariosCount = prontuariosSnap.size || 0;
+    container.innerHTML = `
+      <div class="prontuario-preview-head">
+        <strong>Documentos do aluno selecionado</strong>
+        <p class="small">${prontuariosCount} prontuário(s) encontrado(s)</p>
+      </div>
+      ${formatDocumentosReadOnly(mergeUniqueDocumentos(documentosMatricula), "Documentos cadastrados na matrícula")}
+      ${formatDocumentosReadOnly(mergeUniqueDocumentos(documentosProntuario), "Documentos cadastrados no prontuário")}
+    `;
+  } catch (error) {
+    console.error(error);
+    if (requestId !== prontuarioPreviewRequestId) return;
+    container.innerHTML = "<p class=\"small\">Nao foi possivel carregar os documentos do aluno selecionado.</p>";
+  }
+}
+
+function populateProntuarioFiltroOptions() {
+  const turmaSelect = document.getElementById("proTurmaFiltro");
+  const professorSelect = document.getElementById("proProfessorFiltro");
+
+  if (turmaSelect) {
+    const previousValue = turmaSelect.value;
+    const turmas = getProntuarioTurmas();
+    turmaSelect.innerHTML = "<option value=\"\">Filtrar por turma</option>";
+    turmas.forEach((turma) => {
+      const option = document.createElement("option");
+      option.value = turma.nome;
+      option.textContent = turma.nome;
+      turmaSelect.appendChild(option);
+    });
+    if (previousValue && turmas.some((turma) => turma.nome === previousValue)) {
+      turmaSelect.value = previousValue;
+    }
+  }
+
+  if (professorSelect) {
+    const previousValue = professorSelect.value;
+    const professores = getProntuarioProfessores();
+    professorSelect.innerHTML = "<option value=\"\">Filtrar por professor</option>";
+    professores.forEach((professor) => {
+      const option = document.createElement("option");
+      option.value = professor.id;
+      option.textContent = `${professor.nome || professor.email} (${professor.role})`;
+      professorSelect.appendChild(option);
+    });
+    if (previousValue && professores.some((professor) => professor.id === previousValue)) {
+      professorSelect.value = previousValue;
+    }
+  }
+
+  populateProntuarioAlunoOptions();
+}
+
+function populateProntuarioAlunoOptions() {
+  const alunoSelect = document.getElementById("proAluno");
+  if (!alunoSelect) return;
+
+  const previousValue = alunoSelect.value;
+  const alunos = getProntuarioAlunoCandidates()
+    .map(({ id, data }) => ({
+      id,
+      nome: data.nome || id,
+      turma: data.turma || ""
+    }))
+    .sort((a, b) => {
+      const byName = String(a.nome).localeCompare(String(b.nome));
+      if (byName !== 0) return byName;
+      return String(a.turma).localeCompare(String(b.turma));
+    });
+
+  alunoSelect.innerHTML = "<option value=\"\">Selecione o aluno</option>";
+    if (alunos.length === 0) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "Nenhum aluno encontrado";
+      alunoSelect.appendChild(option);
+      alunoSelect.value = "";
+      return;
+    }
+  alunos.forEach((aluno) => {
+    const option = document.createElement("option");
+    option.value = aluno.nome;
+    option.textContent = aluno.turma ? `${aluno.nome} - ${aluno.turma}` : aluno.nome;
+    alunoSelect.appendChild(option);
+  });
+
+  if (previousValue && alunos.some((aluno) => aluno.nome === previousValue)) {
+    alunoSelect.value = previousValue;
+  }
+
+  void updateProntuarioDocumentosPreview();
 }
 
 async function syncResponsibleUidFromEmail() {
@@ -691,13 +881,13 @@ function formatMatriculaDocumentosDownload(data) {
       const caminho = String(documento?.caminho || "").trim();
       if (!url) return nome;
       arquivosDisponiveis.push({ url, fileName: nomeOriginal });
-      return `<div class="saved-doc-row"><span>${nome}</span><div class="saved-doc-actions"><button type="button" class="doc-view-btn" data-url="${escapeHtml(url)}">Visualizar</button><button type="button" class="doc-download-btn" data-url="${escapeHtml(url)}" data-filename="${escapeHtml(nomeOriginal)}">Baixar</button><button type="button" class="doc-delete-btn" data-url="${escapeHtml(url)}" data-path="${escapeHtml(caminho)}" data-index="${index}" data-filename="${escapeHtml(nomeOriginal)}">Excluir</button></div></div>`;
+      return `<div class="saved-doc-row"><span>${nome}</span><div class="saved-doc-actions"><button type="button" class="doc-view-btn" data-url="${escapeHtml(url)}" data-filename="${escapeHtml(nomeOriginal)}">Visualizar</button><button type="button" class="doc-download-btn" data-url="${escapeHtml(url)}" data-filename="${escapeHtml(nomeOriginal)}">Baixar</button><button type="button" class="doc-delete-btn" data-url="${escapeHtml(url)}" data-path="${escapeHtml(caminho)}" data-index="${index}" data-filename="${escapeHtml(nomeOriginal)}">Excluir</button></div></div>`;
     });
 
   const urlLegada = String(data?.documentos_url || "").trim();
   if (urlLegada) {
     arquivosDisponiveis.push({ url: urlLegada, fileName: "documento-legado" });
-    botoes.push(`<div class="saved-doc-row"><span>documento-legado</span><div class="saved-doc-actions"><button type="button" class="doc-view-btn" data-url="${escapeHtml(urlLegada)}">Visualizar</button><button type="button" class="doc-download-btn" data-url="${escapeHtml(urlLegada)}" data-filename="documento-legado">Baixar</button></div></div>`);
+    botoes.push(`<div class="saved-doc-row"><span>documento-legado</span><div class="saved-doc-actions"><button type="button" class="doc-view-btn" data-url="${escapeHtml(urlLegada)}" data-filename="documento-legado">Visualizar</button><button type="button" class="doc-download-btn" data-url="${escapeHtml(urlLegada)}" data-filename="documento-legado">Baixar</button></div></div>`);
   }
 
   if (botoes.length === 0) {
@@ -709,26 +899,63 @@ function formatMatriculaDocumentosDownload(data) {
   return `Documentos para download:<br>${botoes.map((botao) => `${botao}`).join("")}<div class="saved-doc-all-row">${botaoBaixarTodos}</div>`;
 }
 
+function formatDocumentosReadOnly(data, title = "Documentos da matrícula") {
+  const documentos = Array.isArray(data) ? data : [];
+  if (documentos.length === 0) {
+    return `<div class="prontuario-doc-section prontuario-doc-section-matricula prontuario-doc-section-empty"><div class="prontuario-doc-section-title">${escapeHtml(title)}</div><div class="prontuario-doc-section-body">Nenhum documento importado.</div></div>`;
+  }
+
+  const arquivosDisponiveis = [];
+  const botoes = documentos
+    .map((documento, index) => {
+      const nomeOriginal = String(documento?.nome || `documento-${index + 1}`);
+      const nome = escapeHtml(nomeOriginal);
+      const url = String(documento?.url || "").trim();
+      const caminho = String(documento?.caminho || "").trim();
+      if (!url) return nome;
+      arquivosDisponiveis.push({ url, fileName: nomeOriginal });
+      return `<div class="saved-doc-row"><span>${nome}</span><div class="saved-doc-actions"><button type="button" class="doc-view-btn" data-url="${escapeHtml(url)}" data-filename="${escapeHtml(nomeOriginal)}">Visualizar</button><button type="button" class="doc-download-btn" data-url="${escapeHtml(url)}" data-filename="${escapeHtml(nomeOriginal)}">Baixar</button></div></div>`;
+    });
+
+  const arquivosPayload = escapeHtml(encodeURIComponent(JSON.stringify(arquivosDisponiveis)));
+  const botaoBaixarTodos = `<button type="button" class="doc-download-all-btn" data-files="${arquivosPayload}">Baixar todos os documentos</button>`;
+  return `<div class="prontuario-doc-section prontuario-doc-section-matricula"><div class="prontuario-doc-section-title">${escapeHtml(title)}</div><div class="prontuario-doc-section-body">${botoes.map((botao) => `${botao}`).join("")}<div class="saved-doc-all-row">${botaoBaixarTodos}</div></div></div>`;
+}
+
+function formatProntuarioDocumentosUpload(data) {
+  const documentos = Array.isArray(data?.documentos_upload) ? data.documentos_upload : [];
+  if (documentos.length === 0) {
+    return `<div class="prontuario-doc-section prontuario-doc-section-upload prontuario-doc-section-empty"><div class="prontuario-doc-section-title">Documentos anexados no prontuário</div><div class="prontuario-doc-section-body">Nenhum anexo adicionado.</div></div>`;
+  }
+
+  const arquivosDisponiveis = [];
+  const botoes = documentos
+    .map((documento, index) => {
+      const nomeOriginal = String(documento?.nome || `documento-${index + 1}`);
+      const nome = escapeHtml(nomeOriginal);
+      const url = String(documento?.url || "").trim();
+      const caminho = String(documento?.caminho || "").trim();
+      if (!url) return nome;
+      arquivosDisponiveis.push({ url, fileName: nomeOriginal });
+      return `<div class="saved-doc-row saved-doc-row-upload"><span>${nome}</span><div class="saved-doc-actions"><button type="button" class="doc-view-btn" data-url="${escapeHtml(url)}" data-filename="${escapeHtml(nomeOriginal)}">Visualizar</button><button type="button" class="doc-download-btn" data-url="${escapeHtml(url)}" data-filename="${escapeHtml(nomeOriginal)}">Baixar</button><button type="button" class="doc-delete-btn" data-url="${escapeHtml(url)}" data-path="${escapeHtml(caminho)}" data-index="${index}" data-filename="${escapeHtml(nomeOriginal)}">Excluir</button></div></div>`;
+    });
+
+  const arquivosPayload = escapeHtml(encodeURIComponent(JSON.stringify(arquivosDisponiveis)));
+  const botaoBaixarTodos = `<button type="button" class="doc-download-all-btn" data-files="${arquivosPayload}">Baixar todos os anexos</button>`;
+  return `<div class="prontuario-doc-section prontuario-doc-section-upload"><div class="prontuario-doc-section-title">Documentos anexados no prontuário</div><div class="prontuario-doc-section-body">${botoes.map((botao) => `${botao}`).join("")}<div class="saved-doc-all-row">${botaoBaixarTodos}</div></div></div>`;
+}
+
 async function triggerDocumentDownload(url, fileName) {
   if (!url) return;
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Falha no download: ${response.status}`);
-    }
-    const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = objectUrl;
-    anchor.download = sanitizeFileName(fileName || "documento");
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-  } catch (error) {
-    console.error(error);
-    window.open(url, "_blank", "noopener,noreferrer");
-  }
+  const href = buildStorageServeUrl(url, fileName || getFileNameFromUrl(url), "download");
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.target = "_blank";
+  anchor.rel = "noopener noreferrer";
+  anchor.download = sanitizeFileName(fileName || getFileNameFromUrl(url) || "documento");
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
 }
 
 async function triggerLocalFileDownload(file, fileName) {
@@ -743,9 +970,39 @@ async function triggerLocalFileDownload(file, fileName) {
   setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }
 
-function openUrlInNewTab(url) {
+function ensureAltMedia(url) {
+  if (!url) return url;
+  try {
+    const u = new URL(url);
+    if (u.hostname.includes("firebasestorage.googleapis.com") || u.hostname.includes("firebasestorage.app")) {
+      if (!u.searchParams.has("alt")) {
+        u.searchParams.set("alt", "media");
+      }
+      return u.toString();
+    }
+  } catch (_) { /* não é URL absoluta, retorna original */ }
+  return url;
+}
+
+function getFileNameFromUrl(url) {
+  try {
+    const path = decodeURIComponent(new URL(url).pathname || "");
+    const fileName = path.split("/").pop() || "documento";
+    return sanitizeFileName(fileName);
+  } catch (_) {
+    return "documento";
+  }
+}
+
+function buildStorageServeUrl(url, fileName, mode = "inline") {
+  const source = ensureAltMedia(url);
+  const safeName = sanitizeFileName(fileName || getFileNameFromUrl(url) || "documento");
+  return `${STORAGE_SERVE_FUNCTION_URL}?url=${encodeURIComponent(source)}&fileName=${encodeURIComponent(safeName)}&mode=${encodeURIComponent(mode)}`;
+}
+
+function openUrlInNewTab(url, fileName) {
   if (!url) return;
-  window.open(url, "_blank", "noopener,noreferrer");
+  window.open(buildStorageServeUrl(url, fileName, "inline"), "_blank", "noopener,noreferrer");
 }
 
 async function triggerLocalFileView(file) {
@@ -781,6 +1038,109 @@ function addPendingMatriculaDocumentos(newFiles) {
 function clearPendingMatriculaDocumentos() {
   pendingMatriculaDocumentos = [];
   syncMatriculaDocumentosInput();
+}
+
+function prontuarioDocIdentity(file) {
+  return `${String(file?.name || "").toLowerCase()}::${Number(file?.size || 0)}::${Number(file?.lastModified || 0)}`;
+}
+
+function syncProntuarioDocumentosInput() {
+  const documentosInput = document.getElementById("proDocumentos");
+  if (!documentosInput || typeof DataTransfer === "undefined") return;
+  const dataTransfer = new DataTransfer();
+  pendingProntuarioDocumentos.forEach((file) => dataTransfer.items.add(file));
+  documentosInput.files = dataTransfer.files;
+}
+
+function addPendingProntuarioDocumentos(newFiles) {
+  const existing = new Set(pendingProntuarioDocumentos.map((file) => prontuarioDocIdentity(file)));
+  newFiles.forEach((file) => {
+    const identity = prontuarioDocIdentity(file);
+    if (existing.has(identity)) return;
+    pendingProntuarioDocumentos.push(file);
+    existing.add(identity);
+  });
+  syncProntuarioDocumentosInput();
+}
+
+function clearPendingProntuarioDocumentos() {
+  pendingProntuarioDocumentos = [];
+  syncProntuarioDocumentosInput();
+}
+
+function resetProntuarioUploadProgress() {
+  const wrap = document.getElementById("proUploadProgressWrap");
+  const bar = document.getElementById("proUploadProgressBar");
+  if (bar) bar.style.width = "0%";
+  if (wrap) {
+    wrap.classList.add("hidden");
+    wrap.setAttribute("aria-hidden", "true");
+  }
+}
+
+function setProntuarioUploadProgress(current, total, message) {
+  const wrap = document.getElementById("proUploadProgressWrap");
+  const bar = document.getElementById("proUploadProgressBar");
+  const uploadStatus = document.getElementById("proUploadStatus");
+  const safeTotal = Math.max(1, Number(total || 0));
+  const safeCurrent = Math.min(safeTotal, Math.max(0, Number(current || 0)));
+  const percent = Math.round((safeCurrent / safeTotal) * 100);
+
+  if (wrap) {
+    wrap.classList.remove("hidden");
+    wrap.setAttribute("aria-hidden", "false");
+  }
+  if (bar) {
+    bar.style.width = `${percent}%`;
+  }
+  if (uploadStatus && message) {
+    uploadStatus.textContent = `${message} (${safeCurrent}/${safeTotal})`;
+  }
+}
+
+function renderProntuarioSelectedDocs() {
+  const selectedDocs = document.getElementById("proSelectedDocs");
+  const documentosInput = document.getElementById("proDocumentos");
+  if (!selectedDocs || !documentosInput) return;
+
+  const files = pendingProntuarioDocumentos.length ? pendingProntuarioDocumentos : Array.from(documentosInput.files || []);
+  if (files.length === 0) {
+    selectedDocs.textContent = "Nenhum arquivo selecionado.";
+    return;
+  }
+
+  const arquivosPayload = escapeHtml(
+    encodeURIComponent(
+      JSON.stringify(
+        files.map((file) => ({
+          name: file.name,
+          size: file.size,
+          lastModified: file.lastModified
+        }))
+      )
+    )
+  );
+  selectedDocs.innerHTML = `Arquivos selecionados (${files.length}):<br>${files
+    .map((file, index) => {
+      const nome = escapeHtml(file.name);
+      const tamanho = Math.max(1, Math.round(file.size / 1024));
+      return `<div class="selected-doc-row"><span>- ${nome} (${tamanho} KB)</span><div class="selected-doc-actions"><button type="button" class="selected-doc-view-btn" data-doc-index="${index}">Visualizar</button><button type="button" class="selected-doc-download-btn" data-doc-index="${index}">Baixar</button><button type="button" class="selected-doc-delete-btn" data-doc-index="${index}">Excluir</button></div></div>`;
+    })
+    .join("")}<button type="button" class="selected-doc-download-all-btn" data-docs="${arquivosPayload}">Baixar todos os selecionados</button>`;
+}
+
+function clearProntuarioForm() {
+  ["proAluno", "proTipo", "proArquivo", "proObs"].forEach((fieldId) => {
+    const element = document.getElementById(fieldId);
+    if (element) element.value = "";
+  });
+  const documentosInput = document.getElementById("proDocumentos");
+  if (documentosInput) documentosInput.value = "";
+  clearPendingProntuarioDocumentos();
+  renderProntuarioSelectedDocs();
+  resetProntuarioUploadProgress();
+  const preview = document.getElementById("proDocumentosPreview");
+  if (preview) preview.innerHTML = "<p class=\"small\">Selecione um aluno para ver os documentos já cadastrados.</p>";
 }
 
 function resetMatriculaUploadProgress() {
@@ -971,6 +1331,46 @@ async function deleteSavedMatriculaDocumento({ matriculaId, docIndex, filePath, 
   if (alunoId) {
     await setDoc(doc(db, "alunos", alunoId), { documentos_upload: documentos, updated_at: serverTimestamp(), updated_by: auth.currentUser.uid }, { merge: true });
   }
+}
+
+async function deleteSavedProntuarioDocumento({ prontuarioId, docIndex, filePath }) {
+  if (!prontuarioId && docIndex === undefined) return;
+  if (!confirm("Excluir este documento?")) return;
+
+  const prontuarioRef = doc(db, "prontuarios", prontuarioId);
+  const prontuarioSnap = await getDoc(prontuarioRef);
+  if (!prontuarioSnap.exists()) {
+    alert("Prontuario nao encontrado.");
+    return;
+  }
+
+  const prontuarioData = prontuarioSnap.data();
+  const documentos = Array.isArray(prontuarioData.documentos_upload) ? [...prontuarioData.documentos_upload] : [];
+  const targetIndex = Number.isInteger(docIndex) ? docIndex : documentos.findIndex((item) => String(item?.caminho || "") === String(filePath || ""));
+  if (targetIndex < 0 || targetIndex >= documentos.length) return;
+
+  const [removedDoc] = documentos.splice(targetIndex, 1);
+  if (removedDoc?.caminho) {
+    try {
+      const token = await auth.currentUser.getIdToken();
+      const deleteResponse = await fetch(STORAGE_DELETE_FUNCTION_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ path: removedDoc.caminho, schoolId: currentSchoolId() || "" })
+      });
+      const deletePayload = await deleteResponse.json().catch(() => ({}));
+      if (!deleteResponse.ok || !deletePayload.ok) {
+        throw new Error(deletePayload.error || "Erro ao excluir o documento.");
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  await setDoc(prontuarioRef, { documentos_upload: documentos, updated_at: serverTimestamp(), updated_by: auth.currentUser.uid }, { merge: true });
 }
 
 async function uploadMatriculaFile(file, { alunoSlug, folder }) {
@@ -1449,7 +1849,7 @@ async function audit(action, area) {
 function renderItem(entryTitle, lines, dateValue) {
   const div = document.createElement("div");
   div.className = "item";
-  const bodyLines = lines.map((line) => `<p class=\"line\">${line}</p>`).join("");
+  const bodyLines = lines.map((line) => `<div class=\"line\">${line}</div>`).join("");
   div.innerHTML = `<strong>${entryTitle}</strong>${bodyLines}<p class=\"small\">${formatDate(dateValue)}</p>`;
   return div;
 }
@@ -1498,6 +1898,7 @@ function attachUiHandlers() {
   populateProfessorOptions();
   populateFaixaEtariaOptions();
   populateMatriculaTurmaOptions();
+  populateProntuarioFiltroOptions();
   setAgendaMode();
   applyRoleLayout();
 
@@ -1544,8 +1945,28 @@ function attachUiHandlers() {
   });
   clearPendingMatriculaDocumentos();
   renderMatriculaSelectedDocs();
+  clearPendingProntuarioDocumentos();
+  renderProntuarioSelectedDocs();
   document.getElementById("btnMatriculaCancelar")?.addEventListener("click", () => {
     clearMatriculaForm();
+  });
+  document.getElementById("proDocumentos")?.addEventListener("change", () => {
+    const documentosInput = document.getElementById("proDocumentos");
+    const novosArquivos = Array.from(documentosInput?.files || []);
+    addPendingProntuarioDocumentos(novosArquivos);
+    renderProntuarioSelectedDocs();
+  });
+  document.getElementById("proTurmaFiltro")?.addEventListener("change", () => {
+    populateProntuarioAlunoOptions();
+  });
+  document.getElementById("proProfessorFiltro")?.addEventListener("change", () => {
+    populateProntuarioAlunoOptions();
+  });
+  document.getElementById("proAlunoBusca")?.addEventListener("input", () => {
+    populateProntuarioAlunoOptions();
+  });
+  document.getElementById("proAluno")?.addEventListener("change", () => {
+    void updateProntuarioDocumentosPreview();
   });
   const selectedDocsContainer = document.getElementById("matSelectedDocs");
   if (selectedDocsContainer && !selectedDocsContainer.dataset.downloadBinding) {
@@ -1596,6 +2017,95 @@ function attachUiHandlers() {
       if (!(deleteButton instanceof HTMLButtonElement)) return;
       const index = Number(deleteButton.getAttribute("data-doc-index"));
       removePendingMatriculaDocumento(index);
+    });
+  }
+  const prontuarioSelectedDocsContainer = document.getElementById("proSelectedDocs");
+  if (prontuarioSelectedDocsContainer && !prontuarioSelectedDocsContainer.dataset.downloadBinding) {
+    prontuarioSelectedDocsContainer.dataset.downloadBinding = "true";
+    prontuarioSelectedDocsContainer.addEventListener("click", async (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const allButton = target.closest(".selected-doc-download-all-btn");
+      if (allButton instanceof HTMLButtonElement) {
+        const docsRaw = allButton.getAttribute("data-docs") || "[]";
+        try {
+          const docs = JSON.parse(decodeURIComponent(docsRaw));
+          for (const docItem of docs) {
+            const match = pendingProntuarioDocumentos.find((file) =>
+              file.name === docItem.name &&
+              Number(file.size || 0) === Number(docItem.size || 0) &&
+              Number(file.lastModified || 0) === Number(docItem.lastModified || 0)
+            );
+            if (match) {
+              await triggerLocalFileDownload(match, match.name);
+            }
+          }
+        } catch (error) {
+          console.error(error);
+        }
+        return;
+      }
+      const viewButton = target.closest(".selected-doc-view-btn");
+      if (viewButton instanceof HTMLButtonElement) {
+        const index = Number(viewButton.getAttribute("data-doc-index"));
+        const file = pendingProntuarioDocumentos[index];
+        if (!file) return;
+        await triggerLocalFileView(file);
+        return;
+      }
+      const button = target.closest(".selected-doc-download-btn");
+      if (!(button instanceof HTMLButtonElement)) return;
+      const index = Number(button.getAttribute("data-doc-index"));
+      const file = pendingProntuarioDocumentos[index];
+      if (!file) return;
+      await triggerLocalFileDownload(file, file.name);
+      return;
+    });
+    prontuarioSelectedDocsContainer.addEventListener("click", async (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const deleteButton = target.closest(".selected-doc-delete-btn");
+      if (!(deleteButton instanceof HTMLButtonElement)) return;
+      const index = Number(deleteButton.getAttribute("data-doc-index"));
+      if (index < 0 || index >= pendingProntuarioDocumentos.length) return;
+      pendingProntuarioDocumentos.splice(index, 1);
+      syncProntuarioDocumentosInput();
+      renderProntuarioSelectedDocs();
+    });
+  }
+  const prontuarioPreviewContainer = document.getElementById("proDocumentosPreview");
+  if (prontuarioPreviewContainer && !prontuarioPreviewContainer.dataset.downloadBinding) {
+    prontuarioPreviewContainer.dataset.downloadBinding = "true";
+    prontuarioPreviewContainer.addEventListener("click", async (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const allButton = target.closest(".doc-download-all-btn");
+      if (allButton instanceof HTMLElement) {
+        const filesRaw = allButton.getAttribute("data-files") || "";
+        try {
+          const files = JSON.parse(decodeURIComponent(filesRaw));
+          if (!Array.isArray(files) || files.length === 0) return;
+          for (const file of files) {
+            await triggerDocumentDownload(String(file?.url || ""), String(file?.fileName || "documento"));
+          }
+        } catch (error) {
+          console.error(error);
+          alert("Nao foi possivel baixar todos os documentos.");
+        }
+        return;
+      }
+      const viewButton = target.closest(".doc-view-btn");
+      if (viewButton instanceof HTMLElement) {
+        const url = viewButton.getAttribute("data-url") || "";
+        const fileName = viewButton.getAttribute("data-filename") || getFileNameFromUrl(url);
+        openUrlInNewTab(url, fileName);
+        return;
+      }
+      const downloadButton = target.closest(".doc-download-btn");
+      if (!(downloadButton instanceof HTMLElement)) return;
+      const url = downloadButton.getAttribute("data-url") || "";
+      const fileName = downloadButton.getAttribute("data-filename") || "documento";
+      await triggerDocumentDownload(url, fileName);
     });
   }
   const listMatriculas = document.getElementById("listMatriculas");
@@ -1674,7 +2184,8 @@ function attachUiHandlers() {
       const viewButton = target.closest(".doc-view-btn");
       if (viewButton instanceof HTMLElement) {
         const url = viewButton.getAttribute("data-url") || "";
-        openUrlInNewTab(url);
+        const fileName = viewButton.getAttribute("data-filename") || getFileNameFromUrl(url);
+        openUrlInNewTab(url, fileName);
         return;
       }
       const deleteButton = target.closest(".doc-delete-btn");
@@ -1714,6 +2225,53 @@ function attachUiHandlers() {
       const url = button.getAttribute("data-url") || "";
       const fileName = button.getAttribute("data-filename") || "documento";
       await triggerDocumentDownload(url, fileName);
+    });
+  }
+  const listProntuarios = document.getElementById("listProntuarios");
+  if (listProntuarios && !listProntuarios.dataset.downloadBinding) {
+    listProntuarios.dataset.downloadBinding = "true";
+    listProntuarios.addEventListener("click", async (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const allButton = target.closest(".doc-download-all-btn");
+      if (allButton instanceof HTMLElement) {
+        const filesRaw = allButton.getAttribute("data-files") || "";
+        try {
+          const files = JSON.parse(decodeURIComponent(filesRaw));
+          if (!Array.isArray(files) || files.length === 0) return;
+          for (const file of files) {
+            await triggerDocumentDownload(String(file?.url || ""), String(file?.fileName || "documento"));
+          }
+        } catch (error) {
+          console.error(error);
+          alert("Nao foi possivel baixar todos os documentos.");
+        }
+        return;
+      }
+      const viewButton = target.closest(".doc-view-btn");
+      if (viewButton instanceof HTMLElement) {
+        const url = viewButton.getAttribute("data-url") || "";
+        const fileName = viewButton.getAttribute("data-filename") || getFileNameFromUrl(url);
+        openUrlInNewTab(url, fileName);
+        return;
+      }
+      const downloadButton = target.closest(".doc-download-btn");
+      if (downloadButton instanceof HTMLElement) {
+        const url = downloadButton.getAttribute("data-url") || "";
+        const fileName = downloadButton.getAttribute("data-filename") || "documento";
+        await triggerDocumentDownload(url, fileName);
+        return;
+      }
+      const deleteButton = target.closest(".doc-delete-btn");
+      if (deleteButton instanceof HTMLElement) {
+        const item = deleteButton.closest(".item");
+        if (!(item instanceof HTMLElement)) return;
+        await deleteSavedProntuarioDocumento({
+          prontuarioId: item.dataset.prontuarioId || "",
+          docIndex: Number(deleteButton.getAttribute("data-index")),
+          filePath: deleteButton.getAttribute("data-path") || ""
+        });
+      }
     });
   }
   document.getElementById("matCep")?.addEventListener("blur", async () => {
@@ -2159,15 +2717,79 @@ function attachUiHandlers() {
   };
 
   document.getElementById("btnProntuario").onclick = async () => {
+    const aluno = document.getElementById("proAluno").value.trim();
+    const tipoDocumento = document.getElementById("proTipo").value.trim();
+    const uploadStatus = document.getElementById("proUploadStatus");
+    const documentosInput = document.getElementById("proDocumentos");
+    const maxDocumentoSizeBytes = 20 * 1024 * 1024;
+    const allowedDocumentoMimeTypes = new Set(["application/pdf", "image/jpeg", "image/png"]);
+    const allowedDocumentoExtensions = [".pdf", ".jpg", ".jpeg", ".png"];
+    const documentosFiles = pendingProntuarioDocumentos.length ? [...pendingProntuarioDocumentos] : Array.from(documentosInput?.files || []);
+
+    const documentosTipoInvalido = documentosFiles.filter((file) => {
+      const mimeType = String(file.type || "").toLowerCase();
+      if (allowedDocumentoMimeTypes.has(mimeType)) return false;
+      const fileName = String(file.name || "").toLowerCase();
+      return !allowedDocumentoExtensions.some((ext) => fileName.endsWith(ext));
+    });
+    if (documentosTipoInvalido.length) {
+      const nomes = documentosTipoInvalido.map((file) => file.name).join(", ");
+      alert(`Somente arquivos PDF, JPG ou PNG sao permitidos. Ajuste: ${nomes}`);
+      if (uploadStatus) uploadStatus.textContent = "";
+      return;
+    }
+
+    const documentosAcimaDoLimite = documentosFiles.filter((file) => file.size > maxDocumentoSizeBytes);
+    if (documentosAcimaDoLimite.length) {
+      const nomes = documentosAcimaDoLimite.map((file) => file.name).join(", ");
+      alert(`Cada documento deve ter no maximo 20 MB. Ajuste: ${nomes}`);
+      if (uploadStatus) uploadStatus.textContent = "";
+      return;
+    }
+
+    const uploadedDocs = [];
+    if (uploadStatus) uploadStatus.textContent = "";
+    resetProntuarioUploadProgress();
+
+    const alunoMatricula = await findAlunoByNome(aluno);
+    const documentosMatricula = Array.isArray(alunoMatricula?.data?.documentos_upload) ? alunoMatricula.data.documentos_upload : [];
+
+    try {
+      if (documentosFiles.length > 0) {
+        setProntuarioUploadProgress(0, documentosFiles.length, "Preparando envio");
+      }
+      let uploadedCount = 0;
+      const alunoSlug = slugify(aluno) || `aluno-${Date.now()}`;
+      for (const file of documentosFiles) {
+        setProntuarioUploadProgress(uploadedCount, documentosFiles.length, `Enviando documento: ${file.name}`);
+        const docUpload = await uploadMatriculaFile(file, { alunoSlug, folder: "prontuarios" });
+        uploadedDocs.push(docUpload);
+        uploadedCount += 1;
+        setProntuarioUploadProgress(uploadedCount, documentosFiles.length, `Documento enviado: ${file.name}`);
+      }
+      if (uploadStatus && documentosFiles.length > 0) {
+        uploadStatus.textContent = "Arquivos enviados com sucesso.";
+      }
+    } catch (error) {
+      console.error(error);
+      if (uploadStatus) {
+        uploadStatus.textContent = `Falha no upload: ${error.message || "tente novamente."}`;
+      }
+      return;
+    }
+
     await addDoc(collection(db, "prontuarios"), withSchoolScope({
-      aluno: document.getElementById("proAluno").value.trim(),
-      tipo_documento: document.getElementById("proTipo").value.trim(),
+      aluno,
+      tipo_documento: tipoDocumento,
       arquivo_url: document.getElementById("proArquivo").value.trim(),
+      documentos_matricula: documentosMatricula,
+      documentos_upload: uploadedDocs,
       observacao: document.getElementById("proObs").value.trim(),
       created_at: serverTimestamp(),
       created_by: auth.currentUser.uid
     }));
     await audit("create", "prontuarios");
+    clearProntuarioForm();
     showOk("okPro");
   };
 
@@ -2617,8 +3239,22 @@ function attachLists() {
       data.updated_at || data.created_at
     )
   );
-  attachList("prontuarios", "listProntuarios", (_, data) =>
-    renderItem(`Prontuario - ${data.aluno || "aluno"}`, [`Tipo: ${data.tipo_documento || "-"}`, `Arquivo: ${data.arquivo_url || "-"}`], data.created_at)
+  attachList("prontuarios", "listProntuarios", (id, data) =>
+    (() => {
+      const item = renderItem(
+      `Prontuario - ${data.aluno || "aluno"}`,
+      [
+        `Tipo: ${data.tipo_documento || "-"}`,
+        `Arquivo: ${data.arquivo_url || "-"}`,
+        formatDocumentosReadOnly(data.documentos_matricula, "Documentos importados na matrícula"),
+        formatProntuarioDocumentosUpload(data)
+      ],
+      data.created_at
+      );
+      item.dataset.prontuarioId = id || "";
+      item.dataset.aluno = data.aluno || "";
+      return item;
+    })()
   );
 
   attachList(
@@ -2648,6 +3284,7 @@ function attachLists() {
   const offTurmas = onSnapshot(scopedCollectionQuery("turmas", [limit(100)]), (snap) => {
     cachedTurmas = snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }));
     populateMatriculaTurmaOptions();
+    populateProntuarioFiltroOptions();
 
     const list = document.getElementById("listTurmas");
     if (!list) return;
@@ -2739,6 +3376,7 @@ function attachLists() {
       .filter(({ data }) => data.role === "direcao");
     populateAccUserOptions();
     populateProfessorOptions();
+    populateProntuarioFiltroOptions();
     renderSuperadminDirectors();
   });
   detachListeners.push(offDiretores);
@@ -2752,6 +3390,7 @@ function attachLists() {
 
   const offStudentsSummary = onSnapshot(scopedCollectionQuery("alunos", [limit(500)]), (snap) => {
     cachedStudents = snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }));
+    populateProntuarioAlunoOptions();
     updateSuperadminSummary();
   });
   detachListeners.push(offStudentsSummary);

@@ -397,8 +397,18 @@
                     <section class="card">
                         <div class="card-head" style="background:#70378e;">Administrativo - Prontuarios</div>
                         <div class="card-body">
-                            <div class="row"><input id="proAluno" class="field" placeholder="Aluno"><input id="proTipo" class="field" placeholder="Tipo documento"></div>
+                            <div class="row"><select id="proTurmaFiltro" class="field"><option value="">Filtrar por turma</option></select><select id="proProfessorFiltro" class="field"><option value="">Filtrar por professor</option></select></div>
+                            <input id="proAlunoBusca" class="field" placeholder="Buscar aluno por nome">
+                            <div class="row"><select id="proAluno" class="field"><option value="">Selecione o aluno</option></select><input id="proTipo" class="field" placeholder="Tipo documento"></div>
+                            <div id="proDocumentosPreview" class="prontuario-preview"><p class="small">Selecione um aluno para ver os documentos já cadastrados.</p></div>
                             <input id="proArquivo" class="field" placeholder="URL arquivo">
+                            <label>Upload de documentos (PDF/JPG/PNG, multiplos, ate 20 MB por arquivo)</label>
+                            <input id="proDocumentos" class="field" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png">
+                            <div id="proSelectedDocs" class="small" style="margin-top: -6px; margin-bottom: 10px;">Nenhum arquivo selecionado.</div>
+                            <div id="proUploadProgressWrap" class="upload-progress hidden" aria-hidden="true">
+                                <div id="proUploadProgressBar" class="upload-progress-bar"></div>
+                            </div>
+                            <p class="small" id="proUploadStatus"></p>
                             <textarea id="proObs" class="field" rows="2" placeholder="Observacao"></textarea>
                             <button class="btn" id="btnProntuario">Salvar prontuario</button>
                             <p class="ok" id="okPro">Prontuario salvo.</p>

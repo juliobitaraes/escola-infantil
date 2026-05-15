@@ -541,11 +541,16 @@ const manualData = {
           <small>Campo: Input de texto</small>
           <p>Link para o documento digitalizado hospedado em nuvem.</p>
         </div>
-        <div class="field-doc">
-          <strong>Observação</strong>
-          <small>Campo: Textarea</small>
-          <p>Anotações: validade, pendências, observações do documento.</p>
-        </div>
+          <div class="field-doc">
+            <strong>Upload de Documentos</strong>
+            <small>Campo: Upload múltiplo</small>
+            <p>Aceita PDF, JPG e PNG; os arquivos são enviados direto no cadastro, com preview e barra de progresso.</p>
+          </div>
+          <div class="field-doc">
+            <strong>Observação</strong>
+            <small>Campo: Textarea</small>
+            <p>Anotações: validade, pendências, observações do documento.</p>
+          </div>
       </div>
     `
   },

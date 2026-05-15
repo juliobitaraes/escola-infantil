@@ -87,6 +87,47 @@ function buildMatriculaStoragePath({ schoolId, studentSlug, folder, fileName }) 
   return `matriculas/${schoolId}/${studentSlug}/${folder}/${Date.now()}-${fileName}`;
 }
 
+function sanitizeDownloadFileName(fileName) {
+  return String(fileName || "documento")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 120) || "documento";
+}
+
+function inferMimeTypeFromFileName(fileName) {
+  const safe = String(fileName || "").toLowerCase();
+  const extension = safe.includes(".") ? safe.split(".").pop() : "";
+  const map = {
+    pdf: "application/pdf",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+    doc: "application/msword",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  };
+  return map[extension] || null;
+}
+
+function ensureStorageMediaUrl(rawUrl) {
+  const value = String(rawUrl || "").trim();
+  if (!value) {
+    throw new HttpsError("invalid-argument", "URL do arquivo ausente.");
+  }
+  const parsed = new URL(value);
+  const allowedHosts = ["firebasestorage.googleapis.com", "firebasestorage.app"];
+  if (!allowedHosts.some((host) => parsed.hostname.includes(host))) {
+    throw new HttpsError("invalid-argument", "Host de arquivo invalido.");
+  }
+  if (!parsed.searchParams.has("alt")) {
+    parsed.searchParams.set("alt", "media");
+  }
+  return parsed.toString();
+}
+
 exports.uploadMatriculaDocumento = onRequest({ region: "southamerica-east1", cors: true }, async (request, response) => {
   if (request.method === "OPTIONS") {
     response.status(204).send("");
@@ -111,8 +152,6 @@ exports.uploadMatriculaDocumento = onRequest({ region: "southamerica-east1", cor
     const studentSlug = String(request.query.studentSlug || "").trim();
     const folder = String(request.query.folder || "documentos").trim();
     const fileName = String(request.query.fileName || "arquivo").trim();
-    const contentType = String(request.headers["content-type"] || "application/octet-stream");
-
     if (!schoolId || !studentSlug || !folder || !fileName) {
       response.status(400).json({ ok: false, error: "missing parameters" });
       return;
@@ -131,6 +170,7 @@ exports.uploadMatriculaDocumento = onRequest({ region: "southamerica-east1", cor
       response.status(400).json({ ok: false, error: "empty body" });
       return;
     }
+    const contentType = String(body.contentType || "application/octet-stream");
 
     const safeName = String(fileName)
       .normalize("NFD")
@@ -222,6 +262,45 @@ exports.deleteMatriculaDocumento = onRequest({ region: "southamerica-east1", cor
     logger.error("deleteMatriculaDocumento error", error);
     const message = error instanceof HttpsError ? error.message : "Erro ao excluir documento.";
     response.status(error instanceof HttpsError && error.code === "permission-denied" ? 403 : 500).json({ ok: false, error: message });
+  }
+});
+
+exports.serveMatriculaDocumento = onRequest({ region: "southamerica-east1", cors: true }, async (request, response) => {
+  if (request.method === "OPTIONS") {
+    response.status(204).send("");
+    return;
+  }
+
+  if (request.method !== "GET") {
+    response.status(405).json({ ok: false, error: "method not allowed" });
+    return;
+  }
+
+  try {
+    const sourceUrl = ensureStorageMediaUrl(request.query.url);
+    const mode = String(request.query.mode || "inline").trim().toLowerCase() === "download" ? "download" : "inline";
+    const requestedName = sanitizeDownloadFileName(request.query.fileName || "documento");
+    const upstream = await fetch(sourceUrl);
+    if (!upstream.ok) {
+      response.status(upstream.status).json({ ok: false, error: "upstream fetch failed" });
+      return;
+    }
+
+    const upstreamTypeHeader = String(upstream.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+    const inferredType = inferMimeTypeFromFileName(requestedName);
+    const contentType = inferredType || (upstreamTypeHeader && upstreamTypeHeader !== "application/json" ? upstreamTypeHeader : "application/octet-stream");
+    const bytes = await upstream.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+
+    response.set("Cache-Control", "private, max-age=300");
+    response.set("X-Content-Type-Options", "nosniff");
+    response.set("Content-Type", contentType);
+    response.set("Content-Disposition", `${mode === "download" ? "attachment" : "inline"}; filename="${requestedName}"`);
+    response.status(200).send(buffer);
+  } catch (error) {
+    logger.error("serveMatriculaDocumento error", error);
+    const message = error instanceof HttpsError ? error.message : "Erro ao servir documento.";
+    response.status(error instanceof HttpsError ? 400 : 500).json({ ok: false, error: message });
   }
 });
 
