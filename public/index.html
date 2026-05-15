@@ -380,8 +380,17 @@
                             </div>
                             <p class="small" id="matUploadStatus"></p>
                             <label><input id="matContrato" type="checkbox"> Contrato assinado digitalmente</label>
-                            <button class="btn" id="btnMatricula" style="display:block;margin-top:10px;">Salvar matricula</button>
-                            <button class="btn btn-secondary hidden" id="btnMatriculaCancelar" type="button" style="display:block;margin-top:10px;">Cancelar edicao</button>
+                            <div id="matLgpdPanel" class="lgpd-panel hidden">
+                                <div class="lgpd-panel-header">
+                                    <strong>Consentimento LGPD</strong>
+                                    <span id="matLgpdStatus" class="small">Nenhum consentimento registrado.</span>
+                                </div>
+                                <div id="matLgpdDetails" class="lgpd-panel-details"></div>
+                            </div>
+                            <div class="matricula-form-actions">
+                                <button class="btn" id="btnMatricula">Salvar matricula</button>
+                                <button class="btn btn-secondary hidden" id="btnMatriculaCancelar" type="button">Cancelar edicao</button>
+                            </div>
                             <p class="ok" id="okMat">Matricula salva.</p>
                             <div id="listMatriculas" class="list"></div>
                         </div>
@@ -401,7 +410,7 @@
                             <input id="proAlunoBusca" class="field" placeholder="Buscar aluno por nome">
                             <div class="row"><select id="proAluno" class="field"><option value="">Selecione o aluno</option></select><input id="proTipo" class="field" placeholder="Tipo documento"></div>
                             <div id="proDocumentosPreview" class="prontuario-preview"><p class="small">Selecione um aluno para ver os documentos já cadastrados.</p></div>
-                            <input id="proArquivo" class="field" placeholder="URL arquivo">
+                            <textarea id="proArquivo" class="field" rows="2" placeholder="URLs dos arquivos (uma por linha, opcional)"></textarea>
                             <label>Upload de documentos (PDF/JPG/PNG, multiplos, ate 20 MB por arquivo)</label>
                             <input id="proDocumentos" class="field" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png">
                             <div id="proSelectedDocs" class="small" style="margin-top: -6px; margin-bottom: 10px;">Nenhum arquivo selecionado.</div>
@@ -478,10 +487,47 @@
                     <section class="card">
                         <div class="card-head" style="background:#a63225;">Seguranca - LGPD</div>
                         <div class="card-body">
-                            <input id="lgpdAluno" class="field" placeholder="Aluno (titular)">
-                            <input id="lgpdResp" class="field" placeholder="Responsavel legal">
-                            <textarea id="lgpdEscopo" class="field" rows="2" placeholder="Escopo de consentimento"></textarea>
-                            <button class="btn" id="btnLgpd">Registrar consentimento LGPD</button>
+                            <select id="lgpdAluno" class="field"><option value="">Selecione o aluno (titular)</option></select>
+                            <input id="lgpdResp" class="field" placeholder="Responsavel legal" readonly>
+                            <div class="lgpd-term-box">
+                                <p><strong>TERMO DE CONSENTIMENTO PARA TRATAMENTO DE DADOS DE MENORES (LGPD)</strong></p>
+                                <p>Por este termo, os responsáveis legais do aluno autorizam expressamente a [Nome da Escola] a realizar o tratamento de dados pessoais da criança para as finalidades específicas e destacadas abaixo:</p>
+
+                                <div class="lgpd-scope-block">
+                                    <p><strong>1. Comunicação Institucional via WhatsApp</strong></p>
+                                    <p>Autorizo o cadastro dos números de telefone dos responsáveis em listas de transmissão e canais oficiais da escola para o recebimento de circulares, avisos pedagógicos, relatórios de rotina e comunicações de emergência.</p>
+                                    <div class="lgpd-radio-row">
+                                        <label><input type="radio" name="lgpdScopeComunicacao" id="lgpdScopeComunicacaoSim" value="sim"> SIM, autorizo.</label>
+                                        <label><input type="radio" name="lgpdScopeComunicacao" id="lgpdScopeComunicacaoNao" value="nao"> NÃO, prefiro receber comunicações exclusivamente por e-mail ou meio físico.</label>
+                                    </div>
+                                </div>
+
+                                <div class="lgpd-scope-block">
+                                    <p><strong>2. Fotos e Vídeos de Atividades Pedagógicas Semanais</strong></p>
+                                    <p>Autorizo o registro fotográfico e em vídeo do aluno durante as atividades regulares de sala de aula e rotina escolar, exclusivamente para compartilhamento nos canais fechados de comunicação direta com os próprios pais da turma.</p>
+                                    <div class="lgpd-radio-row">
+                                        <label><input type="radio" name="lgpdScopeSemanal" id="lgpdScopeSemanalSim" value="sim"> SIM, autorizo.</label>
+                                        <label><input type="radio" name="lgpdScopeSemanal" id="lgpdScopeSemanalNao" value="nao"> NÃO autorizo.</label>
+                                    </div>
+                                </div>
+
+                                <div class="lgpd-scope-block">
+                                    <p><strong>3. Fotos e Vídeos em Eventos e Redes Sociais</strong></p>
+                                    <p>Autorizo a captação e a publicação de imagens e vídeos do aluno em eventos escolares (festas, comemorações, apresentações), bem como sua veiculação nas redes sociais oficiais e site da escola, com fins estritamente institucionais e de divulgação de projetos.</p>
+                                    <div class="lgpd-radio-row">
+                                        <label><input type="radio" name="lgpdScopeEventos" id="lgpdScopeEventosSim" value="sim"> SIM, autorizo.</label>
+                                        <label><input type="radio" name="lgpdScopeEventos" id="lgpdScopeEventosNao" value="nao"> NÃO autorizo.</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="lgpdEditBanner" class="lgpd-edit-banner hidden" aria-live="polite">
+                                <strong>Modo de edição ativo.</strong>
+                                <span>Você está atualizando um consentimento LGPD já registrado.</span>
+                            </div>
+                            <div class="row lgpd-form-actions">
+                                <button class="btn" id="btnLgpd">Registrar consentimento LGPD</button>
+                                <button class="btn btn-secondary hidden" id="btnLgpdCancelar" type="button">Cancelar edicao</button>
+                            </div>
                             <p class="ok" id="okLgpd">Consentimento registrado.</p>
                             <div id="listLgpd" class="list"></div>
                         </div>
@@ -594,6 +640,27 @@
             </div>
             <div class="modal-body" id="manualContent">
                 <p>Carregando manual...</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="lgpdNoticeModal" class="modal-overlay" aria-hidden="true">
+        <div class="modal-content lgpd-notice-modal" role="dialog" aria-modal="true" aria-labelledby="lgpdNoticeTitle">
+            <div class="modal-header">
+                <h2 id="lgpdNoticeTitle">Comunicado Importante</h2>
+                <button id="closeLgpdNotice" class="modal-close" aria-label="Fechar comunicado">&times;</button>
+            </div>
+            <div class="modal-body lgpd-notice-body">
+                <p class="lgpd-notice-preview">Proteção de Imagem dos Nossos Alunos</p>
+                <div id="lgpdNoticeText" class="lgpd-notice-textbox" role="document" aria-live="polite"></div>
+                <div class="lgpd-notice-meta">
+                    <div><strong>Responsável:</strong> <span id="lgpdNoticeResponsavel">-</span></div>
+                    <div><strong>WhatsApp:</strong> <span id="lgpdNoticePhone">-</span></div>
+                </div>
+                <div class="row lgpd-notice-actions">
+                    <button class="btn" id="btnLgpdNoticeWhatsapp" type="button">Enviar para WhatsApp</button>
+                    <button class="btn btn-secondary" id="btnLgpdNoticeFechar" type="button">Fechar</button>
+                </div>
             </div>
         </div>
     </div>

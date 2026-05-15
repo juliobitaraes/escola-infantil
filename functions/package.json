@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "serve": "firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions",
-    "migrate:school": "node scripts/migrate-escola-id.js"
+    "migrate:school": "node scripts/migrate-escola-id.js",
+    "migrate:prontuarios": "node scripts/dedupe-prontuarios.js"
   },
   "devDependencies": {
     "eslint": "^8.57.1"

@@ -15,7 +15,8 @@ import {
   getDoc,
   getDocs,
   setDoc,
-  deleteDoc
+  deleteDoc,
+  deleteField
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -74,6 +75,17 @@ let pendingMatriculaDocumentos = [];
 let pendingProntuarioDocumentos = [];
 let prontuarioPreviewRequestId = 0;
 let editingMatriculaId = null;
+let editingLgpdConsentId = null;
+
+const LGPD_NOTICE_MESSAGE = [
+  "Comunicado Importante: Proteção de Imagem dos Nossos Alunos",
+  "Prezadas famílias,",
+  "Para garantirmos um ambiente seguro e em total conformidade com a LGPD, lembramos que a captura de imagens em nossa escola infantil exige cuidados especiais.",
+  "Durante nossas festas e apresentações, pedimos a colaboração de todos para que fotografem e filmem exclusivamente os seus próprios filhos. Caso a imagem de outra criança apareça ao fundo da sua foto, solicitamos que não a publique nas redes sociais ou utilize ferramentas para desfocar o rosto dos demais alunos.",
+  "A escola mantém um controle rigoroso de autorizações de imagem e contamos com a parceria de vocês para proteger a privacidade e a infância de todos os nossos pequenos.",
+  "Atenciosamente,",
+  "Direção Escolar"
+].join("\n\n");
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
@@ -290,6 +302,70 @@ function populateMatriculaTurmaOptions() {
   }
 }
 
+function syncLgpdResponsavelFromAluno() {
+  const alunoSelect = document.getElementById("lgpdAluno");
+  const responsavelInput = document.getElementById("lgpdResp");
+  if (!alunoSelect || !responsavelInput) return;
+
+  const alunoId = alunoSelect.value;
+  if (!alunoId) {
+    responsavelInput.value = "";
+    return;
+  }
+
+  const found = cachedStudents.find(({ id }) => id === alunoId);
+  const data = found?.data || {};
+  responsavelInput.value = data.responsavel_nome || data.responsavel || "";
+}
+
+function populateLgpdAlunoOptions() {
+  const alunoSelect = document.getElementById("lgpdAluno");
+  if (!alunoSelect) return;
+
+  const previousValue = alunoSelect.value;
+  const alunos = cachedStudents
+    .map(({ id, data }) => ({
+      id,
+      nome: data.nome || id,
+      turma: data.turma || ""
+    }))
+    .sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+
+  alunoSelect.innerHTML = "<option value=\"\">Selecione o aluno</option>";
+  alunos.forEach((aluno) => {
+    const option = document.createElement("option");
+    option.value = aluno.id;
+    option.textContent = aluno.turma ? `${aluno.nome} - ${aluno.turma}` : aluno.nome;
+    alunoSelect.appendChild(option);
+  });
+
+  if (previousValue && alunos.some((aluno) => aluno.id === previousValue)) {
+    alunoSelect.value = previousValue;
+  }
+
+  syncLgpdResponsavelFromAluno();
+}
+
+function resolveMatriculaIdForAluno(alunoEntry, alunoNome) {
+  const matriculaId = alunoEntry?.data?.matricula_id || "";
+  if (matriculaId) return matriculaId;
+
+  const normalizedAluno = String(alunoNome || "").trim().toLowerCase();
+  if (!normalizedAluno) return "";
+
+  const candidates = cachedEnrollments.filter(({ data }) =>
+    String(data?.aluno || "").trim().toLowerCase() === normalizedAluno
+  );
+  if (!candidates.length) return "";
+
+  candidates.sort((a, b) => {
+    const aDate = a.data?.updated_at?.toMillis?.() || a.data?.created_at?.toMillis?.() || 0;
+    const bDate = b.data?.updated_at?.toMillis?.() || b.data?.created_at?.toMillis?.() || 0;
+    return bDate - aDate;
+  });
+  return candidates[0].id;
+}
+
 function getProntuarioTurmas() {
   return cachedTurmas
     .map(({ id, data }) => ({
@@ -349,6 +425,39 @@ function mergeUniqueDocumentos(documentos = []) {
     result.push(documento);
   });
   return result;
+}
+
+function parseProntuarioUrlDocumentos(rawValue) {
+  const lines = String(rawValue || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const documentos = [];
+  const invalidUrls = [];
+
+  lines.forEach((url, index) => {
+    try {
+      const parsed = new URL(url);
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        invalidUrls.push(url);
+        return;
+      }
+      const nome = getFileNameFromUrl(url) || `documento-url-${index + 1}`;
+      documentos.push({
+        nome,
+        url,
+        caminho: "",
+        tipo: null,
+        tamanho: 0,
+        uploaded_at: new Date().toISOString(),
+        origem: "url"
+      });
+    } catch (_) {
+      invalidUrls.push(url);
+    }
+  });
+
+  return { documentos, invalidUrls };
 }
 
 async function updateProntuarioDocumentosPreview() {
@@ -454,7 +563,7 @@ function populateProntuarioAlunoOptions() {
       return String(a.turma).localeCompare(String(b.turma));
     });
 
-  alunoSelect.innerHTML = "<option value=\"\">Selecione o aluno</option>";
+    alunoSelect.innerHTML = "<option value=\"\">Selecione o aluno (titular)</option>";
     if (alunos.length === 0) {
       const option = document.createElement("option");
       option.value = "";
@@ -1854,12 +1963,260 @@ function renderItem(entryTitle, lines, dateValue) {
   return div;
 }
 
+function renderMatriculaItem(data, dateValue) {
+  const div = document.createElement("div");
+  div.className = "item item-matricula collapsed";
+  const aluno = data.aluno || "aluno";
+  const turma = data.turma || "-";
+  const lgpdConsentimento = data.lgpd_consentimento || null;
+  const lgpdEscopos = lgpdConsentimento?.escopos || {};
+  const details = [
+    `<span class=\"matricula-actions\"><button type=\"button\" class=\"matricula-edit-btn\">Editar</button><button type=\"button\" class=\"matricula-delete-btn\">Excluir</button></span>`,
+    `Responsavel: ${data.responsavel || "-"}`,
+    `Responsavel vinculado: ${data.responsavel_nome || data.responsavel || "-"}`,
+    `CPF do responsavel: ${formatCpf(data.responsavel_cpf || "") || "-"}`,
+    `Telefone do responsavel: ${data.responsavel_telefone || "-"}`,
+    lgpdConsentimento ? `LGPD: registrado em ${formatDate(lgpdConsentimento.registrado_em || lgpdConsentimento.created_at || null)}` : "LGPD: sem consentimento registrado",
+    lgpdConsentimento ? `LGPD WhatsApp: ${consentLabel(lgpdEscopos.comunicacao_whatsapp)}` : "",
+    lgpdConsentimento ? `LGPD Fotos semanais: ${consentLabel(lgpdEscopos.fotos_videos_semanais)}` : "",
+    lgpdConsentimento ? `LGPD Eventos/redes: ${consentLabel(lgpdEscopos.fotos_videos_eventos_redes)}` : "",
+    `Foto do aluno: ${data.foto_aluno?.url ? "enviada" : "nao enviada"}`,
+    `Documentos anexados: ${Array.isArray(data.documentos_upload) ? data.documentos_upload.length : 0}`,
+    formatMatriculaDocumentosDownload(data),
+    `Endereco: ${(data.endereco?.logradouro || "-")}${data.endereco?.numero ? `, ${data.endereco.numero}` : ""} - ${data.endereco?.bairro || "-"}`,
+    `Cidade/UF: ${data.endereco?.cidade || "-"}/${data.endereco?.uf || "-"} | CEP: ${formatCep(data.endereco?.cep || "") || "-"}`,
+    `Contrato assinado: ${data.contrato_assinado ? "sim" : "nao"}`
+  ];
+  const bodyLines = details.filter(Boolean).map((line) => `<div class=\"line\">${line}</div>`).join("");
+  div.innerHTML = `
+    <div class=\"matricula-item-header\">
+      <div class=\"matricula-item-title-wrap\">
+        <strong>Matricula - ${aluno}</strong>
+        <span class=\"matricula-item-meta\">Turma: ${turma}</span>
+      </div>
+      <button type=\"button\" class=\"matricula-toggle-btn\" aria-expanded=\"false\">Expandir</button>
+    </div>
+    <div class=\"matricula-item-details\">${bodyLines}<p class=\"small\">${formatDate(dateValue)}</p></div>
+  `;
+  return div;
+}
+
+function setLgpdEditMode(consentId) {
+  editingLgpdConsentId = consentId || null;
+  const saveButton = document.getElementById("btnLgpd");
+  const cancelButton = document.getElementById("btnLgpdCancelar");
+  const editBanner = document.getElementById("lgpdEditBanner");
+  if (saveButton) {
+    saveButton.textContent = editingLgpdConsentId ? "Atualizar consentimento LGPD" : "Registrar consentimento LGPD";
+  }
+  if (cancelButton) {
+    cancelButton.classList.toggle("hidden", !editingLgpdConsentId);
+  }
+  if (editBanner) {
+    editBanner.classList.toggle("hidden", !editingLgpdConsentId);
+  }
+}
+
+function clearLgpdFormSelection() {
+  const alunoSelect = document.getElementById("lgpdAluno");
+  if (alunoSelect) alunoSelect.value = "";
+  syncLgpdResponsavelFromAluno();
+  [
+    "lgpdScopeComunicacaoSim",
+    "lgpdScopeComunicacaoNao",
+    "lgpdScopeSemanalSim",
+    "lgpdScopeSemanalNao",
+    "lgpdScopeEventosSim",
+    "lgpdScopeEventosNao"
+  ].forEach((fieldId) => {
+    const element = document.getElementById(fieldId);
+    if (element instanceof HTMLInputElement) element.checked = false;
+  });
+}
+
+function renderLgpdConsentItem(id, data) {
+  const div = document.createElement("div");
+  div.className = "item item-lgpd collapsed";
+  div.dataset.lgpdConsentId = id;
+  const escopos = data.escopos || {};
+  const linhas = [
+    `<span class="lgpd-actions"><button type="button" class="lgpd-edit-btn">Editar</button><button type="button" class="lgpd-delete-btn">Excluir</button></span>`,
+    `Responsavel: ${data.responsavel || "-"}`,
+    `1) Comunicacao via WhatsApp: ${consentLabel(escopos.comunicacao_whatsapp)}`,
+    `2) Fotos/videos semanais: ${consentLabel(escopos.fotos_videos_semanais)}`,
+    `3) Fotos/videos em eventos e redes: ${consentLabel(escopos.fotos_videos_eventos_redes)}`
+  ];
+  if (data.escopo) {
+    linhas.push(`Escopo legado: ${data.escopo}`);
+  }
+  const bodyLines = linhas.filter(Boolean).map((line) => `<div class="line">${line}</div>`).join("");
+  div.innerHTML = `
+    <div class="lgpd-item-header">
+      <div class="lgpd-item-title-wrap">
+        <strong>LGPD - ${data.aluno || "aluno"}</strong>
+        <span class="lgpd-item-meta">${formatDate(data.updated_at || data.created_at)}</span>
+      </div>
+      <button type="button" class="lgpd-toggle-btn" aria-expanded="false">Expandir</button>
+    </div>
+    <div class="lgpd-item-details">${bodyLines}<p class="small">${formatDate(data.updated_at || data.created_at)}</p></div>
+  `;
+  return div;
+}
+
+function loadLgpdConsentForEdit(consentId, data) {
+  const alunoSelect = document.getElementById("lgpdAluno");
+  if (alunoSelect) alunoSelect.value = data.aluno_id || "";
+  syncLgpdResponsavelFromAluno();
+
+  const responsavelInput = document.getElementById("lgpdResp");
+  if (responsavelInput && data.responsavel) {
+    responsavelInput.value = data.responsavel;
+  }
+
+  const escopos = data.escopos || {};
+  const toggleIds = [
+    ["lgpdScopeComunicacaoSim", "lgpdScopeComunicacaoNao", escopos.comunicacao_whatsapp],
+    ["lgpdScopeSemanalSim", "lgpdScopeSemanalNao", escopos.fotos_videos_semanais],
+    ["lgpdScopeEventosSim", "lgpdScopeEventosNao", escopos.fotos_videos_eventos_redes]
+  ];
+  toggleIds.forEach(([simId, naoId, value]) => {
+    const sim = document.getElementById(simId);
+    const nao = document.getElementById(naoId);
+    if (sim instanceof HTMLInputElement) sim.checked = value === true;
+    if (nao instanceof HTMLInputElement) nao.checked = value === false;
+  });
+
+  setLgpdEditMode(consentId);
+}
+
+async function deleteLgpdConsent(consentId, data) {
+  if (!consentId) return;
+  if (!confirm("Excluir este consentimento LGPD?")) return;
+
+  await deleteDoc(doc(db, "lgpd_consentimentos", consentId));
+  const studentMatch = cachedStudents.find(({ id }) => id === data?.aluno_id);
+  const matriculaId = data?.matricula_id || resolveMatriculaIdForAluno(studentMatch, data?.aluno || "");
+  if (matriculaId) {
+    await setDoc(
+      doc(db, "matriculas", matriculaId),
+      withSchoolScope({
+        lgpd_consentimento: deleteField(),
+        updated_at: serverTimestamp(),
+        updated_by: auth.currentUser.uid
+      }),
+      { merge: true }
+    );
+  }
+  await audit("delete", "lgpd_consentimentos");
+  if (editingLgpdConsentId === consentId) {
+    clearLgpdFormSelection();
+    setLgpdEditMode(null);
+  }
+}
+
+function renderProntuarioItem(data, dateValue) {
+  const div = document.createElement("div");
+  div.className = "item item-prontuario collapsed";
+  const aluno = data.aluno || "aluno";
+  const tipo = data.tipo_documento || "-";
+  const totalDocumentos = Array.isArray(data.documentos_upload) ? data.documentos_upload.length : 0;
+  const details = [
+    `Tipo: ${tipo}`,
+    `Arquivo: ${data.arquivo_url || "-"}`,
+    formatDocumentosReadOnly(data.documentos_matricula, "Documentos importados na matrícula"),
+    formatProntuarioDocumentosUpload(data)
+  ];
+  const bodyLines = details.map((line) => `<div class=\"line\">${line}</div>`).join("");
+  div.innerHTML = `
+    <div class=\"prontuario-item-header\">
+      <div class=\"prontuario-item-title-wrap\">
+        <strong>Prontuario - ${aluno}</strong>
+        <span class=\"prontuario-item-meta\">Tipo: ${tipo} | Documentos: ${totalDocumentos}</span>
+      </div>
+      <button type=\"button\" class=\"prontuario-toggle-btn\" aria-expanded=\"false\">Expandir</button>
+    </div>
+    <div class=\"prontuario-item-details\">${bodyLines}<p class=\"small\">${formatDate(dateValue)}</p></div>
+  `;
+  return div;
+}
+
 function showOk(id) {
   const msg = document.getElementById(id);
   msg.style.display = "block";
   setTimeout(() => {
     msg.style.display = "none";
   }, 1800);
+}
+
+function normalizePhoneForWhatsApp(phone) {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("55") && digits.length >= 12) return digits;
+  if (digits.length === 11 || digits.length === 10) return `55${digits}`;
+  return digits.startsWith("55") ? digits : `55${digits}`;
+}
+
+function renderLgpdNoticeHtml(message) {
+  return String(message || "")
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph, index) => {
+      const tag = index === 0 ? "h3" : "p";
+      return `<${tag}>${escapeHtml(paragraph).replace(/\n/g, "<br>")}</${tag}>`;
+    })
+    .join("");
+}
+
+function openLgpdNoticeModal({ responsavel, phone }) {
+  const overlay = document.getElementById("lgpdNoticeModal");
+  const textArea = document.getElementById("lgpdNoticeText");
+  const responsavelLabel = document.getElementById("lgpdNoticeResponsavel");
+  const phoneLabel = document.getElementById("lgpdNoticePhone");
+  const whatsappButton = document.getElementById("btnLgpdNoticeWhatsapp");
+  if (!overlay || !textArea || !responsavelLabel || !phoneLabel || !whatsappButton) return;
+
+  textArea.innerHTML = renderLgpdNoticeHtml(LGPD_NOTICE_MESSAGE);
+  responsavelLabel.textContent = responsavel || "-";
+  phoneLabel.textContent = phone || "-";
+  whatsappButton.disabled = !phone;
+  whatsappButton.dataset.phone = phone || "";
+  whatsappButton.dataset.message = LGPD_NOTICE_MESSAGE;
+  overlay.classList.add("active");
+  overlay.setAttribute("aria-hidden", "false");
+}
+
+function closeLgpdNoticeModal() {
+  const overlay = document.getElementById("lgpdNoticeModal");
+  if (!overlay) return;
+  overlay.classList.remove("active");
+  overlay.setAttribute("aria-hidden", "true");
+}
+
+function sendLgpdNoticeToWhatsapp() {
+  const button = document.getElementById("btnLgpdNoticeWhatsapp");
+  if (!button) return;
+  const phone = normalizePhoneForWhatsApp(button.dataset.phone || "");
+  const message = button.dataset.message || LGPD_NOTICE_MESSAGE;
+  if (!phone) {
+    alert("Nao foi encontrado um telefone valido do responsavel para abrir o WhatsApp.");
+    return;
+  }
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
+}
+
+function readRadioConsent(name) {
+  const selected = document.querySelector(`input[name="${name}"]:checked`);
+  if (!(selected instanceof HTMLInputElement)) return null;
+  if (selected.value === "sim") return true;
+  if (selected.value === "nao") return false;
+  return null;
+}
+
+function consentLabel(value) {
+  if (value === true) return "SIM";
+  if (value === false) return "NAO";
+  return "nao informado";
 }
 
 function clearListeners() {
@@ -1870,6 +2227,7 @@ function clearListeners() {
 function attachList(collectionName, containerId, draw, options = {}) {
   const list = document.getElementById(containerId);
   const orderedBy = options.orderByField || "created_at";
+  const dedupeBy = typeof options.dedupeBy === "function" ? options.dedupeBy : null;
   const q = scopedCollectionQuery(collectionName, [limit(options.limitValue || 20)]);
   const unsubscribe = onSnapshot(q, (snap) => {
     list.innerHTML = "";
@@ -1886,7 +2244,17 @@ function attachList(collectionName, containerId, draw, options = {}) {
         const rightTs = rightValue && typeof rightValue.toDate === "function" ? rightValue.toDate().getTime() : 0;
         return rightTs - leftTs;
       });
-    docs.forEach((row) => list.appendChild(draw(row.id, row.data)));
+    const seenKeys = new Set();
+    const rows = dedupeBy
+      ? docs.filter((row) => {
+        const key = String(dedupeBy(row.data, row.id) || "").trim().toLowerCase();
+        if (!key) return true;
+        if (seenKeys.has(key)) return false;
+        seenKeys.add(key);
+        return true;
+      })
+      : docs;
+    rows.forEach((row) => list.appendChild(draw(row.id, row.data)));
   });
   detachListeners.push(unsubscribe);
 }
@@ -1899,6 +2267,7 @@ function attachUiHandlers() {
   populateFaixaEtariaOptions();
   populateMatriculaTurmaOptions();
   populateProntuarioFiltroOptions();
+  populateLgpdAlunoOptions();
   setAgendaMode();
   applyRoleLayout();
 
@@ -1968,6 +2337,7 @@ function attachUiHandlers() {
   document.getElementById("proAluno")?.addEventListener("change", () => {
     void updateProntuarioDocumentosPreview();
   });
+  document.getElementById("lgpdAluno")?.addEventListener("change", syncLgpdResponsavelFromAluno);
   const selectedDocsContainer = document.getElementById("matSelectedDocs");
   if (selectedDocsContainer && !selectedDocsContainer.dataset.downloadBinding) {
     selectedDocsContainer.dataset.downloadBinding = "true";
@@ -2114,6 +2484,15 @@ function attachUiHandlers() {
     listMatriculas.addEventListener("click", async (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
+      const matriculaToggleButton = target.closest(".matricula-toggle-btn");
+      if (matriculaToggleButton instanceof HTMLElement) {
+        const item = matriculaToggleButton.closest(".item");
+        if (!(item instanceof HTMLElement)) return;
+        const collapsed = item.classList.toggle("collapsed");
+        matriculaToggleButton.textContent = collapsed ? "Expandir" : "Recolher";
+        matriculaToggleButton.setAttribute("aria-expanded", collapsed ? "false" : "true");
+        return;
+      }
       const matriculaEditButton = target.closest(".matricula-edit-btn");
       if (matriculaEditButton instanceof HTMLElement) {
         const item = matriculaEditButton.closest(".item");
@@ -2233,6 +2612,15 @@ function attachUiHandlers() {
     listProntuarios.addEventListener("click", async (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
+      const prontuarioToggleButton = target.closest(".prontuario-toggle-btn");
+      if (prontuarioToggleButton instanceof HTMLElement) {
+        const item = prontuarioToggleButton.closest(".item");
+        if (!(item instanceof HTMLElement)) return;
+        const collapsed = item.classList.toggle("collapsed");
+        prontuarioToggleButton.textContent = collapsed ? "Expandir" : "Recolher";
+        prontuarioToggleButton.setAttribute("aria-expanded", collapsed ? "false" : "true");
+        return;
+      }
       const allButton = target.closest(".doc-download-all-btn");
       if (allButton instanceof HTMLElement) {
         const filesRaw = allButton.getAttribute("data-files") || "";
@@ -2719,6 +3107,7 @@ function attachUiHandlers() {
   document.getElementById("btnProntuario").onclick = async () => {
     const aluno = document.getElementById("proAluno").value.trim();
     const tipoDocumento = document.getElementById("proTipo").value.trim();
+    const arquivosUrlRaw = document.getElementById("proArquivo").value;
     const uploadStatus = document.getElementById("proUploadStatus");
     const documentosInput = document.getElementById("proDocumentos");
     const maxDocumentoSizeBytes = 20 * 1024 * 1024;
@@ -2743,6 +3132,13 @@ function attachUiHandlers() {
     if (documentosAcimaDoLimite.length) {
       const nomes = documentosAcimaDoLimite.map((file) => file.name).join(", ");
       alert(`Cada documento deve ter no maximo 20 MB. Ajuste: ${nomes}`);
+      if (uploadStatus) uploadStatus.textContent = "";
+      return;
+    }
+
+    const { documentos: documentosViaUrl, invalidUrls } = parseProntuarioUrlDocumentos(arquivosUrlRaw);
+    if (invalidUrls.length) {
+      alert(`As URLs abaixo sao invalidas. Informe uma URL por linha (http/https): ${invalidUrls.join(", ")}`);
       if (uploadStatus) uploadStatus.textContent = "";
       return;
     }
@@ -2778,17 +3174,63 @@ function attachUiHandlers() {
       return;
     }
 
-    await addDoc(collection(db, "prontuarios"), withSchoolScope({
-      aluno,
-      tipo_documento: tipoDocumento,
-      arquivo_url: document.getElementById("proArquivo").value.trim(),
-      documentos_matricula: documentosMatricula,
-      documentos_upload: uploadedDocs,
-      observacao: document.getElementById("proObs").value.trim(),
-      created_at: serverTimestamp(),
-      created_by: auth.currentUser.uid
-    }));
-    await audit("create", "prontuarios");
+    const alunoIdentity = slugify(aluno);
+    const existingSnapshot = await getDocs(scopedCollectionQuery("prontuarios", [limit(200)]));
+    const existingDocs = existingSnapshot.docs
+      .map((docSnap) => ({ id: docSnap.id, data: docSnap.data() || {} }))
+      .filter((entry) => slugify(entry.data?.aluno || "") === alunoIdentity)
+      .sort((left, right) => {
+        const leftRef = left.data?.updated_at || left.data?.created_at;
+        const rightRef = right.data?.updated_at || right.data?.created_at;
+        const leftTs = leftRef && typeof leftRef.toDate === "function" ? leftRef.toDate().getTime() : 0;
+        const rightTs = rightRef && typeof rightRef.toDate === "function" ? rightRef.toDate().getTime() : 0;
+        return rightTs - leftTs;
+      });
+
+    const latest = existingDocs[0] || null;
+    const existingUploads = existingDocs.flatMap((entry) => Array.isArray(entry.data?.documentos_upload) ? entry.data.documentos_upload : []);
+    const existingArquivoUrls = existingDocs.flatMap((entry) => {
+      if (Array.isArray(entry.data?.arquivos_url)) return entry.data.arquivos_url;
+      if (entry.data?.arquivo_url) return [entry.data.arquivo_url];
+      return [];
+    });
+    const mergedArquivoUrls = Array.from(new Set([...existingArquivoUrls, ...documentosViaUrl.map((doc) => doc.url)]));
+    const documentosPayload = mergeUniqueDocumentos([...existingUploads, ...uploadedDocs, ...documentosViaUrl]);
+
+    if (latest?.id) {
+      await setDoc(doc(db, "prontuarios", latest.id), withSchoolScope({
+        aluno,
+        tipo_documento: tipoDocumento || latest.data.tipo_documento || "",
+        arquivo_url: mergedArquivoUrls[0] || latest.data.arquivo_url || "",
+        arquivos_url: mergedArquivoUrls,
+        documentos_matricula: mergeUniqueDocumentos([
+          ...existingDocs.flatMap((entry) => Array.isArray(entry.data?.documentos_matricula) ? entry.data.documentos_matricula : []),
+          ...documentosMatricula
+        ]),
+        documentos_upload: documentosPayload,
+        observacao: document.getElementById("proObs").value.trim() || latest.data.observacao || "",
+        updated_at: serverTimestamp(),
+        updated_by: auth.currentUser.uid
+      }), { merge: true });
+      const staleDocs = existingDocs.filter((entry) => entry.id !== latest.id);
+      for (const stale of staleDocs) {
+        await deleteDoc(doc(db, "prontuarios", stale.id));
+      }
+      await audit("update", "prontuarios");
+    } else {
+      await addDoc(collection(db, "prontuarios"), withSchoolScope({
+        aluno,
+        tipo_documento: tipoDocumento,
+        arquivo_url: documentosViaUrl[0]?.url || "",
+        arquivos_url: documentosViaUrl.map((doc) => doc.url),
+        documentos_matricula: documentosMatricula,
+        documentos_upload: documentosPayload,
+        observacao: document.getElementById("proObs").value.trim(),
+        created_at: serverTimestamp(),
+        created_by: auth.currentUser.uid
+      }));
+      await audit("create", "prontuarios");
+    }
     clearProntuarioForm();
     showOk("okPro");
   };
@@ -2897,17 +3339,154 @@ function attachUiHandlers() {
   };
 
   document.getElementById("btnLgpd").onclick = async () => {
-    await addDoc(collection(db, "lgpd_consentimentos"), withSchoolScope({
-      aluno: document.getElementById("lgpdAluno").value.trim(),
-      responsavel: document.getElementById("lgpdResp").value.trim(),
-      escopo: document.getElementById("lgpdEscopo").value.trim(),
+    const alunoSelect = document.getElementById("lgpdAluno");
+    const responsavelInput = document.getElementById("lgpdResp");
+    const alunoId = alunoSelect?.value || "";
+    const alunoEntry = cachedStudents.find(({ id }) => id === alunoId);
+    const aluno = alunoEntry?.data?.nome || "";
+    const responsavel = responsavelInput?.value.trim() || alunoEntry?.data?.responsavel_nome || alunoEntry?.data?.responsavel || "";
+    const consentComunicacao = readRadioConsent("lgpdScopeComunicacao");
+    const consentSemanal = readRadioConsent("lgpdScopeSemanal");
+    const consentEventos = readRadioConsent("lgpdScopeEventos");
+
+    if (!alunoId || !aluno || !responsavel) {
+      alert("Selecione o aluno para preencher o responsavel legal automaticamente.");
+      return;
+    }
+
+    if (consentComunicacao === null || consentSemanal === null || consentEventos === null) {
+      alert("Marque SIM ou NAO para os 3 escopos do termo LGPD.");
+      return;
+    }
+
+    const matriculaId = resolveMatriculaIdForAluno(alunoEntry, aluno);
+    if (!matriculaId) {
+      alert("Nao foi encontrada uma matricula vinculada para este aluno. O consentimento nao foi registrado.");
+      return;
+    }
+
+    const consentPayload = {
+      aluno,
+      aluno_id: alunoId,
+      matricula_id: matriculaId,
+      responsavel,
+      escopos: {
+        comunicacao_whatsapp: consentComunicacao,
+        fotos_videos_semanais: consentSemanal,
+        fotos_videos_eventos_redes: consentEventos
+      },
+      termo_nome: "TERMO DE CONSENTIMENTO PARA TRATAMENTO DE DADOS DE MENORES (LGPD)",
       versao: "1.0",
       created_at: serverTimestamp(),
       created_by: auth.currentUser.uid
-    }));
-    await audit("create", "lgpd_consentimentos");
+    };
+
+    let consentRef;
+    if (editingLgpdConsentId) {
+      consentRef = doc(db, "lgpd_consentimentos", editingLgpdConsentId);
+      await setDoc(
+        consentRef,
+        withSchoolScope({
+          ...consentPayload,
+          updated_at: serverTimestamp(),
+          updated_by: auth.currentUser.uid
+        }),
+        { merge: true }
+      );
+    } else {
+      consentRef = await addDoc(collection(db, "lgpd_consentimentos"), withSchoolScope(consentPayload));
+    }
+    await setDoc(
+      doc(db, "matriculas", matriculaId),
+      withSchoolScope({
+        lgpd_consentimento: {
+          consentimento_id: consentRef.id,
+          aluno_id: alunoId,
+          aluno,
+          responsavel,
+          escopos: consentPayload.escopos,
+          termo_nome: consentPayload.termo_nome,
+          versao: consentPayload.versao,
+          registrado_em: serverTimestamp(),
+          registrado_por: auth.currentUser.uid
+        },
+        updated_at: serverTimestamp(),
+        updated_by: auth.currentUser.uid
+      }),
+      { merge: true }
+    );
+    await audit("update", "matriculas.lgpd_consentimento");
+    await audit(editingLgpdConsentId ? "update" : "create", "lgpd_consentimentos");
+    openLgpdNoticeModal({
+      responsavel,
+      phone: String(alunoEntry?.data?.responsavel_telefone || alunoEntry?.data?.telefone_responsavel || "").trim()
+    });
+    clearLgpdFormSelection();
+    setLgpdEditMode(null);
     showOk("okLgpd");
   };
+
+  document.getElementById("btnLgpdCancelar")?.addEventListener("click", () => {
+    clearLgpdFormSelection();
+    setLgpdEditMode(null);
+  });
+
+  document.getElementById("closeLgpdNotice")?.addEventListener("click", closeLgpdNoticeModal);
+  document.getElementById("btnLgpdNoticeFechar")?.addEventListener("click", closeLgpdNoticeModal);
+  document.getElementById("btnLgpdNoticeWhatsapp")?.addEventListener("click", sendLgpdNoticeToWhatsapp);
+  document.getElementById("lgpdNoticeModal")?.addEventListener("click", (event) => {
+    if (event.target && event.target.id === "lgpdNoticeModal") {
+      closeLgpdNoticeModal();
+    }
+  });
+
+  const listLgpd = document.getElementById("listLgpd");
+  if (listLgpd && !listLgpd.dataset.actionBinding) {
+    listLgpd.dataset.actionBinding = "true";
+    listLgpd.addEventListener("click", async (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const toggleButton = target.closest(".lgpd-toggle-btn");
+      if (toggleButton instanceof HTMLElement) {
+        const item = toggleButton.closest(".item");
+        if (!(item instanceof HTMLElement)) return;
+        const collapsed = item.classList.toggle("collapsed");
+        toggleButton.textContent = collapsed ? "Expandir" : "Recolher";
+        toggleButton.setAttribute("aria-expanded", collapsed ? "false" : "true");
+        return;
+      }
+
+      const editButton = target.closest(".lgpd-edit-btn");
+      if (editButton instanceof HTMLElement) {
+        const item = editButton.closest(".item");
+        if (!(item instanceof HTMLElement)) return;
+        const consentId = item.dataset.lgpdConsentId || "";
+        if (!consentId) return;
+        const snap = await getDoc(doc(db, "lgpd_consentimentos", consentId));
+        if (!snap.exists()) {
+          alert("Consentimento LGPD nao encontrado para edicao.");
+          return;
+        }
+        loadLgpdConsentForEdit(consentId, snap.data() || {});
+        return;
+      }
+
+      const deleteButton = target.closest(".lgpd-delete-btn");
+      if (deleteButton instanceof HTMLElement) {
+        const item = deleteButton.closest(".item");
+        if (!(item instanceof HTMLElement)) return;
+        const consentId = item.dataset.lgpdConsentId || "";
+        if (!consentId) return;
+        const snap = await getDoc(doc(db, "lgpd_consentimentos", consentId));
+        if (!snap.exists()) {
+          alert("Consentimento LGPD nao encontrado para exclusao.");
+          return;
+        }
+        await deleteLgpdConsent(consentId, snap.data() || {});
+      }
+    });
+  }
 
   document.getElementById("btnSchoolSave").onclick = async () => {
     if (!isSuperAdmin()) {
@@ -3204,24 +3783,7 @@ function attachLists() {
   );
 
   attachList("matriculas", "listMatriculas", (id, data) => {
-    const item = renderItem(
-      `Matricula - ${data.aluno || "aluno"}`,
-      [
-        `<span class="matricula-actions"><button type="button" class="matricula-edit-btn">Editar</button><button type="button" class="matricula-delete-btn">Excluir</button></span>`,
-        `Responsavel: ${data.responsavel || "-"}`,
-        `Responsavel vinculado: ${data.responsavel_nome || data.responsavel || "-"}`,
-        `CPF do responsavel: ${formatCpf(data.responsavel_cpf || "") || "-"}`,
-        `Telefone do responsavel: ${data.responsavel_telefone || "-"}`,
-        `Turma: ${data.turma || "-"}`,
-        `Foto do aluno: ${data.foto_aluno?.url ? "enviada" : "nao enviada"}`,
-        `Documentos anexados: ${Array.isArray(data.documentos_upload) ? data.documentos_upload.length : 0}`,
-        formatMatriculaDocumentosDownload(data),
-        `Endereco: ${(data.endereco?.logradouro || "-")}${data.endereco?.numero ? `, ${data.endereco.numero}` : ""} - ${data.endereco?.bairro || "-"}`,
-        `Cidade/UF: ${data.endereco?.cidade || "-"}/${data.endereco?.uf || "-"} | CEP: ${formatCep(data.endereco?.cep || "") || "-"}`,
-        `Contrato assinado: ${data.contrato_assinado ? "sim" : "nao"}`
-      ],
-      data.created_at
-    );
+    const item = renderMatriculaItem(data, data.created_at);
     item.dataset.matriculaId = id;
     item.dataset.aluno = data.aluno || "";
     return item;
@@ -3239,23 +3801,12 @@ function attachLists() {
       data.updated_at || data.created_at
     )
   );
-  attachList("prontuarios", "listProntuarios", (id, data) =>
-    (() => {
-      const item = renderItem(
-      `Prontuario - ${data.aluno || "aluno"}`,
-      [
-        `Tipo: ${data.tipo_documento || "-"}`,
-        `Arquivo: ${data.arquivo_url || "-"}`,
-        formatDocumentosReadOnly(data.documentos_matricula, "Documentos importados na matrícula"),
-        formatProntuarioDocumentosUpload(data)
-      ],
-      data.created_at
-      );
-      item.dataset.prontuarioId = id || "";
-      item.dataset.aluno = data.aluno || "";
-      return item;
-    })()
-  );
+  attachList("prontuarios", "listProntuarios", (id, data) => {
+    const item = renderProntuarioItem(data, data.updated_at || data.created_at);
+    item.dataset.prontuarioId = id || "";
+    item.dataset.aluno = data.aluno || "";
+    return item;
+  }, { dedupeBy: (data) => slugify(data.aluno || "") });
 
   attachList(
     "usuarios",
@@ -3321,9 +3872,7 @@ function attachLists() {
       data.created_at
     )
   );
-  attachList("lgpd_consentimentos", "listLgpd", (_, data) =>
-    renderItem(`LGPD - ${data.aluno || "aluno"}`, [`Responsavel: ${data.responsavel || "-"}`, `Escopo: ${data.escopo || "-"}`], data.created_at)
-  );
+  attachList("lgpd_consentimentos", "listLgpd", (id, data) => renderLgpdConsentItem(id, data));
 
   const qCob = scopedCollectionQuery("cobrancas", [limit(80)]);
   const offCob = onSnapshot(qCob, (snap) => {
@@ -3391,6 +3940,7 @@ function attachLists() {
   const offStudentsSummary = onSnapshot(scopedCollectionQuery("alunos", [limit(500)]), (snap) => {
     cachedStudents = snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }));
     populateProntuarioAlunoOptions();
+    populateLgpdAlunoOptions();
     updateSuperadminSummary();
   });
   detachListeners.push(offStudentsSummary);
