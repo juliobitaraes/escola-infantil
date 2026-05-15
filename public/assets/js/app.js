@@ -87,6 +87,13 @@ const LGPD_NOTICE_MESSAGE = [
   "Direção Escolar"
 ].join("\n\n");
 
+const AGENDA_STATUS_LABELS = {
+  rascunho: "Rascunho",
+  enviado: "Enviado",
+  corrigido: "Corrigido",
+  leitura_confirmada: "Leitura confirmada"
+};
+
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -99,6 +106,21 @@ function isSuperUser() {
 
 function isSuperAdmin() {
   return isSuperUser();
+}
+
+function normalizeAgendaStatus(value) {
+  return Object.prototype.hasOwnProperty.call(AGENDA_STATUS_LABELS, value) ? value : "rascunho";
+}
+
+function agendaStatusLabel(value) {
+  return AGENDA_STATUS_LABELS[normalizeAgendaStatus(value)];
+}
+
+function setAgendaStatusField(value) {
+  const agendaStatus = document.getElementById("agendaStatus");
+  if (!agendaStatus) return;
+  agendaStatus.value = normalizeAgendaStatus(value);
+  agendaStatus.disabled = true;
 }
 
 function currentSchoolId() {
@@ -344,6 +366,36 @@ function populateLgpdAlunoOptions() {
   }
 
   syncLgpdResponsavelFromAluno();
+}
+
+function populateAgendaAlunoOptions() {
+  const alunoSelect = document.getElementById("agendaAluno");
+  if (!alunoSelect) return;
+
+  const previousValue = alunoSelect.value;
+  const alunos = cachedStudents
+    .map(({ id, data }) => ({
+      id,
+      nome: data.nome || id,
+      turma: data.turma || ""
+    }))
+    .sort((a, b) => {
+      const byName = String(a.nome).localeCompare(String(b.nome));
+      if (byName !== 0) return byName;
+      return String(a.turma).localeCompare(String(b.turma));
+    });
+
+  alunoSelect.innerHTML = "<option value=\"\">Selecione o aluno</option>";
+  alunos.forEach((aluno) => {
+    const option = document.createElement("option");
+    option.value = aluno.nome;
+    option.textContent = aluno.turma ? `${aluno.nome} - ${aluno.turma}` : aluno.nome;
+    alunoSelect.appendChild(option);
+  });
+
+  if (previousValue && alunos.some((aluno) => aluno.nome === previousValue)) {
+    alunoSelect.value = previousValue;
+  }
 }
 
 function resolveMatriculaIdForAluno(alunoEntry, alunoNome) {
@@ -1683,7 +1735,6 @@ function setAgendaMode() {
     "agendaTurma",
     "agendaData",
     "agendaResponsavelUid",
-    "agendaStatus",
     "agendaAlimentacao",
     "agendaAlimentacaoObs",
     "agendaSonoInicio",
@@ -1726,7 +1777,7 @@ function setSelectedAgenda(id, data) {
     document.getElementById("agendaRespostaResponsavel").value = "";
     return;
   }
-  statusTag.textContent = `Selecionada: ${data.aluno || "Aluno"} - ${data.status || "rascunho"}`;
+  statusTag.textContent = `Selecionada: ${data.aluno || "Aluno"} - ${agendaStatusLabel(data.status)}`;
   meta.textContent = `Aluno: ${data.aluno || "-"} | Data: ${data.data || "-"} | Leitura: ${data.lido_em ? "confirmada" : "pendente"}`;
   document.getElementById("agendaRespostaResponsavel").value = data.resposta_responsavel || "";
   renderAgendaEventsList();
@@ -1773,7 +1824,7 @@ function clearAgendaForm() {
   document.getElementById("agendaAlimentacao").value = "Comeu tudo";
   document.getElementById("agendaSonoQualidade").value = "Dormiu bem";
   document.getElementById("agendaHumor").value = "Tranquilo";
-  document.getElementById("agendaStatus").value = "rascunho";
+  setAgendaStatusField("rascunho");
   document.getElementById("agendaData").value = todayString();
 }
 
@@ -1808,7 +1859,7 @@ function fillAgendaForm(data) {
   document.getElementById("agendaTurma").value = data.turma || "";
   document.getElementById("agendaData").value = data.data || todayString();
   document.getElementById("agendaResponsavelUid").value = data.responsavel_uid || "";
-  document.getElementById("agendaStatus").value = data.status || "rascunho";
+  setAgendaStatusField(data.status || "rascunho");
   document.getElementById("agendaAlimentacao").value = data.alimentacao?.status || "Comeu tudo";
   document.getElementById("agendaAlimentacaoObs").value = data.alimentacao?.observacao || "";
   document.getElementById("agendaSonoInicio").value = data.sono?.inicio || "";
@@ -1877,10 +1928,8 @@ async function saveAgenda(statusOverride) {
     alert("Informe o aluno para salvar a agenda.");
     return;
   }
-  if (statusOverride) {
-    payload.status = statusOverride;
-    document.getElementById("agendaStatus").value = statusOverride;
-  }
+  payload.status = normalizeAgendaStatus(statusOverride || "rascunho");
+  setAgendaStatusField(payload.status);
 
   const ref = doc(db, "agenda_diaria", payload.id);
   const existing = await getDoc(ref);
@@ -2718,7 +2767,7 @@ function attachUiHandlers() {
     fillAgendaForm(found.data());
     await syncAgendaBinding();
     document.getElementById("agendaData").value = todayString();
-    document.getElementById("agendaStatus").value = "rascunho";
+    setAgendaStatusField("rascunho");
     showOk("okAgenda");
   };
 
@@ -2734,6 +2783,7 @@ function attachUiHandlers() {
     await setDoc(
       doc(db, "agenda_diaria", selectedAgendaId),
       withSchoolScope({
+        status: selectedAgendaData.resposta_responsavel ? "corrigido" : "leitura_confirmada",
         lido_em: serverTimestamp(),
         family_last_action: "leitura",
         updated_at: serverTimestamp(),
@@ -2758,6 +2808,7 @@ function attachUiHandlers() {
     await setDoc(
       doc(db, "agenda_diaria", selectedAgendaId),
       withSchoolScope({
+        status: "corrigido",
         resposta_responsavel: document.getElementById("agendaRespostaResponsavel").value.trim(),
         respondido_em: serverTimestamp(),
         family_last_action: "resposta",
@@ -3659,7 +3710,7 @@ function attachLists() {
         `${data.aluno || "Aluno"} - ${data.data || "sem data"}`,
         [
           `Turma: ${data.turma || "-"}`,
-          `Status: ${data.status || "rascunho"}`,
+          `Status: ${agendaStatusLabel(data.status)}`,
           `Alimentacao: ${data.alimentacao?.status || "-"}`,
           `Sono: ${data.sono?.qualidade || "-"}`,
           `Familia leu: ${data.lido_em ? "sim" : "nao"}`,
@@ -3939,6 +3990,7 @@ function attachLists() {
 
   const offStudentsSummary = onSnapshot(scopedCollectionQuery("alunos", [limit(500)]), (snap) => {
     cachedStudents = snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }));
+    populateAgendaAlunoOptions();
     populateProntuarioAlunoOptions();
     populateLgpdAlunoOptions();
     updateSuperadminSummary();

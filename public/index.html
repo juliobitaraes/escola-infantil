@@ -94,17 +94,20 @@
                                 <span class="tag" id="agendaModeTag">Modo escola</span>
                                 <span class="tag tag-warn" id="agendaSelectedStatus">Nenhuma agenda selecionada</span>
                             </div>
-                            <input id="agendaAluno" class="field" placeholder="Aluno">
+                                <select id="agendaAluno" class="field">
+                                    <option value="">Selecione o aluno</option>
+                                </select>
                             <div class="row">
                                 <input id="agendaTurma" class="field" placeholder="Turma">
                                 <input id="agendaData" class="field" type="date">
                             </div>
                             <div class="row">
                                 <input id="agendaResponsavelUid" class="field" placeholder="Identificador do responsavel (automatico)" readonly>
-                                <select id="agendaStatus" class="field">
+                                <select id="agendaStatus" class="field" disabled>
                                     <option value="rascunho">Rascunho</option>
                                     <option value="enviado">Enviado</option>
                                     <option value="corrigido">Corrigido</option>
+                                    <option value="leitura_confirmada">Leitura confirmada</option>
                                 </select>
                             </div>
                             <div class="agenda-block school-only">
