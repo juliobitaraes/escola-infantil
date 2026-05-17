@@ -1728,7 +1728,251 @@ select.field {
     color: var(--primary-light);
 }
 
+.planning-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 14px 0 10px;
+}
+
+.planning-note {
+    margin-bottom: 16px;
+}
+
+.planning-editor {
+    border: 1px solid var(--border-dark);
+    border-radius: 18px;
+    overflow: hidden;
+    background: var(--bg-card);
+    margin-bottom: 18px;
+}
+
+.planning-surface {
+    --planning-primary: #7fb4d8;
+    --planning-secondary: #3f7f73;
+    --planning-accent: #f4c95d;
+    --planning-bg: linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 92%, #101722 8%), color-mix(in srgb, var(--bg-dark) 92%, #0b1118 8%));
+    --planning-text: var(--text);
+    --planning-muted: var(--text-muted);
+    --planning-card-bg: color-mix(in srgb, var(--bg-card) 88%, #101722 12%);
+    --planning-line: color-mix(in srgb, var(--border-dark) 86%, #7fb4d8 14%);
+    --planning-soft-block: color-mix(in srgb, var(--bg-dark) 78%, #1d3147 22%);
+    --planning-soft-warm: color-mix(in srgb, var(--bg-dark) 82%, #5b4a18 18%);
+    --planning-badge-bg: color-mix(in srgb, var(--bg-dark) 76%, #1a2a3f 24%);
+    --planning-badge-text: #d7e8f4;
+    --planning-badge-code-bg: #5b4a18;
+    --planning-badge-code-text: #ffe08a;
+    --planning-edit-hover: color-mix(in srgb, var(--bg-card) 82%, #5b4a18 18%);
+    --planning-edit-focus: color-mix(in srgb, var(--bg-darker) 86%, #ffffff 14%);
+    --planning-pcd-head-bg: #5c2f34;
+    --planning-pcd-head-text: #ffd9d6;
+    --planning-pcd-cell-bg: #3b2529;
+    --planning-footer-text: color-mix(in srgb, var(--text-muted) 88%, white 12%);
+    background: var(--planning-bg);
+    color: var(--planning-text);
+    padding: 24px;
+    line-height: 1.6;
+}
+
+body.light-theme .planning-surface {
+    --planning-primary: #a2c2e8;
+    --planning-secondary: #bce7dc;
+    --planning-accent: #f9e79f;
+    --planning-bg: #fafafa;
+    --planning-text: #4a4a4a;
+    --planning-muted: #7f8c8d;
+    --planning-card-bg: #ffffff;
+    --planning-line: #e5e8e8;
+    --planning-soft-block: #eaf2f8;
+    --planning-soft-warm: #fef9e7;
+    --planning-badge-bg: #f2f4f4;
+    --planning-badge-text: #566573;
+    --planning-badge-code-bg: #fcf3cf;
+    --planning-badge-code-text: #b7950b;
+    --planning-edit-hover: #fcf3cf;
+    --planning-edit-focus: #ffffff;
+    --planning-pcd-head-bg: #fadbd8;
+    --planning-pcd-head-text: #78281f;
+    --planning-pcd-cell-bg: #fdedec;
+    --planning-footer-text: #7f8c8d;
+}
+
+.planning-header {
+    text-align: center;
+    margin-bottom: 24px;
+    border-bottom: 3px solid var(--planning-primary);
+    padding-bottom: 18px;
+}
+
+.planning-header h1 {
+    color: var(--planning-primary);
+    margin-bottom: 6px;
+    font-weight: 700;
+}
+
+.planning-stage-section h2 {
+    color: color-mix(in srgb, var(--planning-primary) 70%, var(--planning-text) 30%);
+    border-bottom: 2px solid var(--planning-line);
+    padding-bottom: 5px;
+    margin-top: 0;
+}
+
+.planning-metas-section h3 {
+    color: color-mix(in srgb, var(--planning-accent) 70%, #d35400 30%);
+    margin-top: 0;
+}
+
+.planning-surface [contenteditable="true"] {
+    border: 1px dashed transparent;
+    border-radius: 6px;
+    padding: 2px 4px;
+    transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.planning-surface [contenteditable="true"]:hover {
+    background: var(--planning-edit-hover);
+    border-color: var(--planning-accent);
+}
+
+.planning-surface [contenteditable="true"]:focus {
+    background: var(--planning-edit-focus);
+    border-color: var(--planning-primary);
+    box-shadow: 0 0 0 3px rgba(162, 194, 232, 0.18);
+    outline: none;
+}
+
+.planning-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    background: var(--planning-soft-block);
+    padding: 20px;
+    border-radius: 14px;
+    margin-bottom: 24px;
+    border: 1px solid var(--planning-line);
+}
+
+.planning-metas-section {
+    background: var(--planning-soft-warm);
+    border-left: 5px solid var(--planning-accent);
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 24px;
+}
+
+.planning-metas-list {
+    margin: 0;
+    padding-left: 22px;
+}
+
+.planning-metas-list li + li {
+    margin-top: 8px;
+}
+
+.planning-stage-section {
+    background: var(--planning-card-bg);
+    padding: 24px;
+    border-radius: 14px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+    border: 1px solid var(--planning-line);
+}
+
+.planning-bncc-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 14px 0;
+}
+
+.planning-badge {
+    background: var(--planning-badge-bg);
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--planning-badge-text);
+    border: 1px solid var(--planning-line);
+}
+
+.planning-bncc-code {
+    background: var(--planning-badge-code-bg);
+    color: var(--planning-badge-code-text);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.9em;
+    margin-left: 4px;
+}
+
+.planning-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 14px;
+}
+
+.planning-table th,
+.planning-table td {
+    border: 1px solid var(--planning-line);
+    padding: 12px;
+    text-align: left;
+    vertical-align: top;
+}
+
+.planning-table th {
+    background: color-mix(in srgb, var(--planning-card-bg) 84%, var(--planning-soft-block) 16%);
+    width: 25%;
+    color: color-mix(in srgb, var(--planning-text) 76%, var(--planning-muted) 24%);
+}
+
+.planning-row-pcd th {
+    background: var(--planning-pcd-head-bg);
+    color: var(--planning-pcd-head-text);
+}
+
+.planning-row-pcd td {
+    background: var(--planning-pcd-cell-bg);
+}
+
+.planning-footer {
+    margin-top: 34px;
+    border-top: 1px solid var(--planning-line);
+    padding-top: 18px;
+    text-align: center;
+    font-size: 0.85em;
+    color: var(--planning-footer-text);
+}
+
 @media (max-width: 768px) {
+    .planning-toolbar {
+        flex-direction: column;
+    }
+
+    .planning-toolbar .btn {
+        width: 100%;
+    }
+
+    .planning-surface {
+        padding: 16px;
+    }
+
+    .planning-stage-section {
+        padding: 16px;
+    }
+
+    .planning-table,
+    .planning-table tbody,
+    .planning-table tr,
+    .planning-table th,
+    .planning-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .planning-table th {
+        border-bottom: none;
+    }
+
     .superadmin-summary,
     .superadmin-panel,
     .superadmin-lists,

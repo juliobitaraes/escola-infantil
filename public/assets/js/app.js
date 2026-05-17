@@ -702,6 +702,255 @@ function printBnccTableOnly(modeName = "auto") {
   }
 }
 
+function currentPlanningTimestampLabel() {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date());
+}
+
+function getPlanningEditor() {
+  return document.getElementById("planEditor");
+}
+
+function getPlanningTemplateMarkup() {
+  const template = document.getElementById("planEditorTemplate");
+  return template instanceof HTMLTemplateElement ? template.innerHTML.trim() : "";
+}
+
+function resetPlanningEditor() {
+  const editor = getPlanningEditor();
+  const templateMarkup = getPlanningTemplateMarkup();
+  if (!editor || !templateMarkup) return;
+  editor.innerHTML = templateMarkup;
+  syncPlanningInstitution();
+  updatePlanningTimestamp();
+}
+
+function getPlanningRoleElement(roleName) {
+  return document.querySelector(`[data-plan-role="${roleName}"]`);
+}
+
+function getPlanningRoleText(roleName) {
+  return String(getPlanningRoleElement(roleName)?.textContent || "").trim();
+}
+
+function syncPlanningInstitution() {
+  const institutionEl = getPlanningRoleElement("institution");
+  if (!institutionEl) return;
+
+  const schoolName = String(schoolHeaderName?.textContent || "").trim();
+  const currentValue = String(institutionEl.textContent || "").trim();
+  if (!schoolName || schoolName === "Carregando escola...") return;
+  if (!currentValue || currentValue === "Nome da Escola" || currentValue === "Portal Escolar" || currentValue === "Carregando escola...") {
+    institutionEl.textContent = schoolName;
+  }
+}
+
+function updatePlanningTimestamp() {
+  const timestampEl = getPlanningRoleElement("updated-at");
+  if (!timestampEl) return;
+  timestampEl.textContent = currentPlanningTimestampLabel();
+}
+
+function getPlanningSummaryText() {
+  const editor = getPlanningEditor();
+  if (!editor) return "";
+  const text = String(editor.textContent || "").replace(/\s+/g, " ").trim();
+  return text.slice(0, 220);
+}
+
+function planningPrintStyles() {
+  return `
+    :root {
+      --planning-primary: #A2C2E8;
+      --planning-secondary: #BCE7DC;
+      --planning-accent: #F9E79F;
+      --planning-bg: #FAFAFA;
+      --planning-text: #4A4A4A;
+      --planning-card-bg: #FFFFFF;
+      --planning-pcd-bg: #FADBD8;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--planning-bg);
+      color: var(--planning-text);
+      line-height: 1.6;
+    }
+    .planning-surface {
+      max-width: 1000px;
+      margin: 24px auto;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .planning-header {
+      text-align: center;
+      margin-bottom: 32px;
+      border-bottom: 3px solid var(--planning-primary);
+      padding-bottom: 20px;
+    }
+    .planning-header h1 {
+      color: #5D8AA8;
+      margin-bottom: 5px;
+      font-weight: 600;
+    }
+    .planning-stage-section h2 {
+      color: #4A6B82;
+      border-bottom: 2px solid #E5E7E9;
+      padding-bottom: 5px;
+      margin-top: 0;
+    }
+    .planning-metas-section h3 {
+      color: #D35400;
+      margin-top: 0;
+    }
+    .planning-info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      background: #EAF2F8;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 25px;
+    }
+    .planning-metas-section {
+      background: #FEF9E7;
+      border-left: 5px solid #F4D03F;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+    }
+    .planning-metas-list {
+      margin: 0;
+      padding-left: 20px;
+    }
+    .planning-metas-list li {
+      margin-bottom: 8px;
+    }
+    .planning-stage-section {
+      background: var(--planning-card-bg);
+      padding: 25px;
+      border-radius: 12px;
+      margin-bottom: 30px;
+      border: 1px solid #E5E8E8;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+      page-break-inside: avoid;
+    }
+    .planning-bncc-fields {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 15px 0;
+    }
+    .planning-badge {
+      background: #F2F4F4;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.85em;
+      font-weight: 500;
+      color: #566573;
+      border: 1px solid #E5E7E9;
+    }
+    .planning-bncc-code {
+      background: #FCF3CF;
+      color: #B7950B;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 0.9em;
+      margin-left: 4px;
+    }
+    .planning-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    .planning-table th,
+    .planning-table td {
+      border: 1px solid #E5E8E8;
+      padding: 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .planning-table th {
+      background: #F8F9F9;
+      width: 25%;
+      color: #626567;
+    }
+    .planning-row-pcd th {
+      background: #FADBD8 !important;
+      color: #78281F;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }
+    .planning-row-pcd td {
+      background: #FDEDEC !important;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }
+    .planning-footer {
+      margin-top: 50px;
+      border-top: 1px solid #E5E7E9;
+      padding-top: 20px;
+      text-align: center;
+      font-size: 0.85em;
+      color: #7F8C8D;
+    }
+    @page {
+      size: A4 portrait;
+      margin: 12mm;
+    }
+  `;
+}
+
+function printPlanningEditor() {
+  const editor = getPlanningEditor();
+  if (!editor || !editor.innerHTML.trim()) {
+    alert("Nao foi possivel gerar o planejamento para impressao.");
+    return;
+  }
+
+  updatePlanningTimestamp();
+  const printWindow = window.open("", "_blank", "width=1200,height=900");
+  if (!printWindow) {
+    alert("O navegador bloqueou a janela de impressao. Permita pop-ups e tente novamente.");
+    return;
+  }
+
+  const html = `
+    <!doctype html>
+    <html lang="pt-BR">
+      <head>
+        <meta charset="utf-8">
+        <title>Planejamento Pedagogico</title>
+        <style>${planningPrintStyles()}</style>
+      </head>
+      <body>${editor.innerHTML}</body>
+    </html>
+  `;
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+
+  const triggerPrint = () => {
+    printWindow.print();
+    printWindow.close();
+  };
+
+  if (printWindow.document.readyState === "complete") {
+    setTimeout(triggerPrint, 120);
+  } else {
+    printWindow.onload = () => setTimeout(triggerPrint, 120);
+  }
+}
+
 function setBnccEditMode(reportId) {
   editingBnccReportId = reportId || null;
   const saveButton = document.getElementById("btnRelatorio");
@@ -824,6 +1073,50 @@ function populateMatriculaTurmaOptions() {
 
   if (previousValue && turmas.some((turma) => turma.nome === previousValue)) {
     turmaSelect.value = previousValue;
+  }
+}
+
+function populatePlanTurmaOptions() {
+  const turmaSelect = document.getElementById("planTurma");
+  if (!turmaSelect) return;
+
+  const previousValue = turmaSelect.value;
+  const turmas = cachedTurmas
+    .map(({ id, data }) => ({ id, nome: data.nome || id }))
+    .sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+
+  turmaSelect.innerHTML = "<option value=\"\">Turma de referencia</option>";
+  turmas.forEach((turma) => {
+    const option = document.createElement("option");
+    option.value = turma.nome;
+    option.textContent = turma.nome;
+    turmaSelect.appendChild(option);
+  });
+
+  if (previousValue && turmas.some((turma) => turma.nome === previousValue)) {
+    turmaSelect.value = previousValue;
+  }
+}
+
+function populatePlanFaixaOptions() {
+  const faixaSelect = document.getElementById("planFaixa");
+  if (!faixaSelect) return;
+
+  const previousValue = faixaSelect.value;
+  const faixas = cachedFaixasEtarias
+    .map(({ id, data }) => ({ id, nome: data.nome || id, descricao: data.descricao || "" }))
+    .sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+
+  faixaSelect.innerHTML = "<option value=\"\">Faixa etaria principal</option>";
+  faixas.forEach((faixa) => {
+    const option = document.createElement("option");
+    option.value = faixa.id;
+    option.textContent = faixa.nome + (faixa.descricao ? ` - ${faixa.descricao}` : "");
+    faixaSelect.appendChild(option);
+  });
+
+  if (previousValue && faixas.some((faixa) => faixa.id === previousValue)) {
+    faixaSelect.value = previousValue;
   }
 }
 
@@ -1404,6 +1697,7 @@ function resolveSchoolDisplayName() {
 function updateSchoolHeaderName() {
   if (!schoolHeaderName) return;
   schoolHeaderName.textContent = resolveSchoolDisplayName();
+  syncPlanningInstitution();
 }
 
 function updateSuperadminSummary() {
@@ -3019,6 +3313,8 @@ function attachUiHandlers() {
   populateProfessorOptions();
   populateFaixaEtariaOptions();
   populateMatriculaTurmaOptions();
+  populatePlanTurmaOptions();
+  populatePlanFaixaOptions();
   populateProntuarioFiltroOptions();
   populateLgpdAlunoOptions();
   populateBnccAlunoOptions();
@@ -3731,11 +4027,35 @@ function attachUiHandlers() {
     printBnccTableOnly(mode);
   };
 
+  resetPlanningEditor();
+
+  document.getElementById("btnPlanReset")?.addEventListener("click", () => {
+    resetPlanningEditor();
+  });
+
+  document.getElementById("btnPlanPrint")?.addEventListener("click", () => {
+    printPlanningEditor();
+  });
+
   document.getElementById("btnPlan").onclick = async () => {
+    updatePlanningTimestamp();
+    const editor = getPlanningEditor();
+    const titulo = getPlanningRoleText("title") || "Planejamento Pedagogico Anual";
+    const instituicao = getPlanningRoleText("institution");
+    const anoLetivo = getPlanningRoleText("year");
+    const coordenador = getPlanningRoleText("coordinator");
+    const temaNorteador = getPlanningRoleText("theme");
     await addDoc(collection(db, "planejamento_aulas"), withSchoolScope({
       turma: document.getElementById("planTurma").value.trim(),
       faixa_etaria: document.getElementById("planFaixa").value.trim(),
-      atividades: document.getElementById("planAtividades").value.trim(),
+      atividades: getPlanningSummaryText(),
+      titulo,
+      instituicao,
+      ano_letivo: anoLetivo,
+      coordenador,
+      tema_norteador: temaNorteador,
+      conteudo_html: editor ? editor.innerHTML.trim() : "",
+      atualizado_em_label: currentPlanningTimestampLabel(),
       created_at: serverTimestamp(),
       created_by: auth.currentUser.uid
     }));
@@ -4726,8 +5046,13 @@ function attachLists() {
   attachList("relatorios_bncc", "listRelatoriosBncc", (id, data) => renderBnccReportItem(id, data));
   attachList("planejamento_aulas", "listPlanejamento", (_, data) =>
     renderItem(
-      `Planejamento - ${data.turma || "turma"}`,
-      [`Faixa: ${data.faixa_etaria || "-"}`, data.atividades || "Sem atividades"],
+      `${data.titulo || `Planejamento - ${data.turma || "turma"}`}`,
+      [
+        `Turma: ${data.turma || "-"}`,
+        `Faixa: ${data.faixa_etaria || "-"}`,
+        `Tema: ${data.tema_norteador || "-"}`,
+        data.atividades || "Sem atividades"
+      ],
       data.created_at
     )
   );
@@ -4830,6 +5155,7 @@ function attachLists() {
   const offTurmas = onSnapshot(scopedCollectionQuery("turmas", [limit(100)]), (snap) => {
     cachedTurmas = snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }));
     populateMatriculaTurmaOptions();
+    populatePlanTurmaOptions();
     populateProntuarioFiltroOptions();
 
     const list = document.getElementById("listTurmas");
@@ -4932,6 +5258,7 @@ function attachLists() {
   const offFaixas = onSnapshot(scopedCollectionQuery("faixas_etarias", [limit(100)]), (snap) => {
     cachedFaixasEtarias = snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }));
     populateFaixaEtariaOptions();
+    populatePlanFaixaOptions();
     renderFaixasEtarias();
   });
   detachListeners.push(offFaixas);

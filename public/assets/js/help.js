@@ -558,7 +558,8 @@ const manualData = {
   acessos: {
     title: '👥 Acessos e Turmas',
     content: `
-      <p><strong>Descrição:</strong> Gestão de permissões de usuários do sistema e cadastro de turmas/salas.</p>
+      <p><strong>Descrição:</strong> Gestão de usuários, permissões, turmas e faixas etárias. Este módulo centraliza o provisionamento dos acessos operacionais da escola.</p>
+      <p style="color: var(--text-muted); margin-bottom: 16px;"><strong>Fluxo recomendado:</strong> criar o usuário, vincular a escola e o perfil, revisar a lista de usuários e então cadastrar turmas e faixas etárias para uso em matrículas, agenda e relatórios.</p>
       
       <h4 style="color: var(--primary-light); margin-top: 20px;">Gestão de Acessos</h4>
       <p style="color: var(--text-muted); margin-bottom: 16px;"><strong>Perfis disponíveis:</strong></p>
@@ -599,14 +600,34 @@ const manualData = {
       
       <div class="fields-grid" style="margin-top: 20px;">
         <div class="field-doc">
+          <strong>Novo Usuário</strong>
+          <small>Campos: Nome, e-mail, senha temporária e perfil</small>
+          <p>Cria a conta de acesso no Firebase Authentication e registra o usuário no Firestore para uso imediato no sistema.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Selecionar Usuário</strong>
+          <small>Campo: Lista de seleção</small>
+          <p>Carrega um usuário existente para revisar UID, escola vinculada e perfil atual antes da atualização.</p>
+        </div>
+        <div class="field-doc">
           <strong>UID do Usuário</strong>
+          <small>Campo: Somente leitura</small>
+          <p>Identificador interno do usuário. É preenchido automaticamente ao selecionar um cadastro existente.</p>
+        </div>
+        <div class="field-doc">
+          <strong>ID da Escola</strong>
           <small>Campo: Input de texto</small>
-          <p>ID único do usuário no sistema Firebase (email). Obtém ao criar conta.</p>
+          <p>Escopo institucional do usuário. Define quais documentos e registros o colaborador poderá acessar.</p>
         </div>
         <div class="field-doc">
           <strong>Novo Perfil</strong>
           <small>Campo: Select</small>
-          <p>Perfil que será atribuído/alterado para esse usuário.</p>
+          <p>Perfil que será atribuído ou alterado para o usuário selecionado.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Criar usuários de responsáveis</strong>
+          <small>Campo: Botão de manutenção</small>
+          <p>Gera automaticamente os logins das famílias a partir das matrículas que ainda não possuem conta vinculada.</p>
         </div>
       </div>
 
@@ -629,8 +650,107 @@ const manualData = {
         </div>
         <div class="field-doc">
           <strong>Professor Responsável UID</strong>
-          <small>Campo: Input de texto</small>
-          <p>ID/Email do professor coordenador da turma.</p>
+          <small>Campo: Lista de seleção</small>
+          <p>Selecione o professor responsável entre os usuários cadastrados da escola.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Faixas Etárias</strong>
+          <small>Campos: Nome e descrição</small>
+          <p>Cadastre as faixas etárias para padronizar o uso em turmas, relatórios BNCC e organização pedagógica.</p>
+        </div>
+      </div>
+    `
+  },
+
+  superadmin: {
+    title: '🏛️ Superadmin - Escolas e Diretores',
+    content: `
+      <p><strong>Descrição:</strong> Painel global para operação multiunidade. Disponível apenas para o superusuário, concentra cadastro de escolas, diretores, métricas e rotinas de manutenção.</p>
+      <p style="color: var(--text-muted); margin-bottom: 16px;"><strong>Fluxo recomendado:</strong> cadastrar a escola, criar o diretor vinculado, revisar status e métricas e usar as rotinas de manutenção apenas quando houver necessidade administrativa.</p>
+
+      <h4 style="color: var(--primary-light); margin-top: 20px;">Resumo e métricas</h4>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Resumo geral</strong>
+          <small>Campo: Cards automáticos</small>
+          <p>Mostra totais de escolas, diretores, alunos e matrículas para acompanhamento rápido da base.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Métricas por escola</strong>
+          <small>Campo: Lista filtrável</small>
+          <p>Permite filtrar por cidade e ordenar por totais, alunos, matrículas ou diretores.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Gráfico por escola</strong>
+          <small>Campo: Painel visual</small>
+          <p>Apresenta comparativos entre unidades para leitura rápida de volume e atividade.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Ranking de atividade</strong>
+          <small>Campo: Lista automática</small>
+          <p>Destaca as escolas mais ativas de acordo com os dados consolidados no sistema.</p>
+        </div>
+      </div>
+
+      <h4 style="color: var(--primary-light); margin-top: 20px;">Cadastro e gestão de escolas</h4>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Buscar escola</strong>
+          <small>Campo: Input de busca</small>
+          <p>Localiza escolas por nome ou ID para edição rápida.</p>
+        </div>
+        <div class="field-doc">
+          <strong>ID, nome e cidade</strong>
+          <small>Campos: Input de texto</small>
+          <p>Dados principais da unidade. O ID é usado como referência técnica em usuários e escopo de dados.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Status da escola</strong>
+          <small>Campo: Select</small>
+          <p>Define se a unidade está ativa ou inativa. A inativação preserva histórico e facilita bloqueio operacional.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Ações</strong>
+          <small>Campos: Salvar, limpar e inativar</small>
+          <p>Use salvar para cadastrar ou atualizar; use inativar quando a unidade deixar de operar.</p>
+        </div>
+      </div>
+
+      <h4 style="color: var(--primary-light); margin-top: 20px;">Cadastro e gestão de diretores</h4>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Buscar diretor</strong>
+          <small>Campo: Input de busca</small>
+          <p>Pesquisa por nome, e-mail ou escola vinculada.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Nome, e-mail e escola</strong>
+          <small>Campos: Formulário principal</small>
+          <p>Dados usados para criar ou atualizar o acesso do diretor e definir a unidade que ele administrará.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Senha temporária</strong>
+          <small>Campo: Input opcional</small>
+          <p>Se informada, é usada na criação inicial do diretor. Pode ser redefinida depois pelo botão de manutenção.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Status do diretor</strong>
+          <small>Campo: Select</small>
+          <p>Controla se o diretor está ativo ou inativo no ambiente.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Ações de manutenção</strong>
+          <small>Campos: Cadastrar, salvar, redefinir senha e alternar status</small>
+          <p>Essas ações usam Cloud Functions administrativas e devem ser restritas ao superusuário.</p>
+        </div>
+      </div>
+
+      <h4 style="color: var(--primary-light); margin-top: 20px;">Manutenção de responsáveis</h4>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Criar usuários de responsáveis</strong>
+          <small>Campo: Botão de manutenção</small>
+          <p>Executa a rotina global que cria logins para responsáveis cadastrados em matrículas sem usuário correspondente.</p>
         </div>
       </div>
     `
@@ -639,7 +759,7 @@ const manualData = {
   portaria: {
     title: '🚪 Portaria e LGPD',
     content: `
-      <p><strong>Descrição:</strong> Registro de segurança (retiradas) e gestão de consentimentos LGPD (Lei de Proteção de Dados).</p>
+      <p><strong>Descrição:</strong> Registro de retiradas, controle de identidade e gestão de consentimentos LGPD (Lei Geral de Proteção de Dados).</p>
       
       <h4 style="color: var(--primary-light); margin-top: 20px;">Portaria - Retiradas</h4>
       <div class="fields-grid">
@@ -670,6 +790,8 @@ const manualData = {
         </div>
       </div>
 
+      <p style="color: var(--text-muted); margin-top: 16px;"><strong>Boas práticas:</strong> confirme parentesco, documento e autorização antes de concluir a retirada, principalmente para terceiros autorizados.</p>
+
       <h4 style="color: var(--primary-light); margin-top: 20px;">LGPD - Consentimentos</h4>
       <p style="color: var(--text-muted); margin-bottom: 16px;">Lei Geral de Proteção de Dados Pessoais: registro formal de autorização para uso de dados de alunos menores.</p>
       <div class="fields-grid">
@@ -688,10 +810,532 @@ const manualData = {
           <small>Campo: Textarea</small>
           <p>Quais dados podem ser usados e para quê (ex: "Fotos para mural escolar", "Relatórios pedagógicos compartilhados").</p>
         </div>
+        <div class="field-doc">
+          <strong>Termos por finalidade</strong>
+          <small>Campo: Opções SIM/NÃO</small>
+          <p>O sistema registra autorizações separadas para comunicação institucional, fotos/vídeos pedagógicos semanais e uso em eventos/redes sociais.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Edição de consentimento</strong>
+          <small>Campo: Modo de edição</small>
+          <p>Consentimentos já cadastrados podem ser revisados e atualizados sem perder o histórico operacional da matrícula.</p>
+        </div>
       </div>
     `
   }
 };
+
+const manualOrder = [
+  'agenda',
+  'mural',
+  'chat',
+  'galeria',
+  'autorizacoes',
+  'bncc',
+  'planejamento',
+  'anamnese',
+  'ocorrencias',
+  'frequencia',
+  'cobrancas',
+  'regua',
+  'extras',
+  'caixa',
+  'matriculas',
+  'alunos',
+  'prontuarios',
+  'usuarios',
+  'turmas',
+  'portaria',
+  'lgpd',
+  'superadmin'
+];
+
+Object.assign(manualData, {
+  galeria: {
+    title: '📸 Galeria',
+    content: `
+      <p><strong>Descrição:</strong> Publicação de registros visuais das atividades da escola para consulta interna e compartilhamento conforme as permissões vigentes.</p>
+      <p style="color: var(--text-muted); margin-bottom: 16px;"><strong>Fluxo recomendado:</strong> selecione o aluno, informe a URL da imagem, registre uma legenda objetiva e confira se existe autorização adequada antes da divulgação.</p>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Aluno</strong>
+          <small>Campo: Lista de seleção</small>
+          <p>Identifica a criança vinculada ao registro fotográfico.</p>
+        </div>
+        <div class="field-doc">
+          <strong>URL da Foto</strong>
+          <small>Campo: Input de texto</small>
+          <p>Endereço da imagem já hospedada para exibição no mural visual.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Legenda</strong>
+          <small>Campo: Input de texto</small>
+          <p>Descrição curta do contexto pedagógico ou institucional da foto.</p>
+        </div>
+      </div>
+    `
+  },
+  autorizacoes: {
+    title: '✅ Autorizações',
+    content: `
+      <p><strong>Descrição:</strong> Registro de permissões formais relacionadas ao aluno, incluindo uso de imagem, retirada por terceiros e outras autorizações específicas.</p>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Aluno</strong>
+          <small>Campo: Input de texto</small>
+          <p>Nome do aluno ao qual a autorização se aplica.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Tipo de Autorização</strong>
+          <small>Campo: Input de texto</small>
+          <p>Classificação do consentimento ou permissão registrada.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Terceiro Autorizado</strong>
+          <small>Campo: Input de texto opcional</small>
+          <p>Preencha quando a autorização envolver retirada ou representação por outra pessoa.</p>
+        </div>
+      </div>
+    `
+  },
+  bncc: {
+    title: '📋 BNCC',
+    content: `
+      <p><strong>Descrição:</strong> Emissão de relatórios pedagógicos alinhados à BNCC, com foco em objetivos de aprendizagem, parecer descritivo e impressão da ficha.</p>
+      <p style="color: var(--text-muted); margin-bottom: 16px;"><strong>Fluxo recomendado:</strong> selecione aluno e faixa, revise a tabela de objetivos, registre o parecer global e salve antes de imprimir.</p>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Aluno e Faixa</strong>
+          <small>Campos: Listas de seleção</small>
+          <p>Definem a base curricular e o estudante avaliado.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Identificação pedagógica</strong>
+          <small>Campos: Idade, período e professor</small>
+          <p>Complementam a ficha com o contexto da turma e do ciclo letivo.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Matriz BNCC</strong>
+          <small>Campo: Tabela interativa</small>
+          <p>Permite registrar observações e evolução por objetivo de aprendizagem.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Parecer Global</strong>
+          <small>Campo: Textarea</small>
+          <p>Sintetiza o desenvolvimento do aluno em linguagem pedagógica formal.</p>
+        </div>
+      </div>
+    `
+  },
+  planejamento: {
+    title: '📝 Planejamento',
+    content: `
+      <p><strong>Descrição:</strong> Organização das atividades da turma com foco em faixa etária, objetivos e rotina pedagógica.</p>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Turma</strong>
+          <small>Campo: Input de texto</small>
+          <p>Identifica para qual grupo o planejamento será aplicado.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Faixa Etária</strong>
+          <small>Campo: Input de texto</small>
+          <p>Define o nível esperado de desenvolvimento das atividades.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Planejamento de Aulas</strong>
+          <small>Campo: Textarea</small>
+          <p>Registre objetivos, materiais, propostas e sequência de execução.</p>
+        </div>
+      </div>
+    `
+  },
+  anamnese: {
+    title: '🩺 Anamnese',
+    content: `
+      <p><strong>Descrição:</strong> Cadastro inicial de informações de saúde e cuidados essenciais do aluno para apoio pedagógico e segurança diária.</p>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Aluno</strong>
+          <small>Campo: Input de texto</small>
+          <p>Nome do aluno associado à ficha.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Alergias</strong>
+          <small>Campo: Input de texto</small>
+          <p>Informe alergias alimentares, medicamentosas ou ambientais relevantes.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Restrições Alimentares</strong>
+          <small>Campo: Input de texto</small>
+          <p>Registre restrições permanentes ou temporárias.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Histórico de Saúde</strong>
+          <small>Campo: Textarea</small>
+          <p>Descreva informações clínicas importantes para acompanhamento institucional.</p>
+        </div>
+      </div>
+    `
+  },
+  ocorrencias: {
+    title: '⚠️ Ocorrências',
+    content: `
+      <p><strong>Descrição:</strong> Registro formal de eventos relevantes envolvendo o aluno, com foco em rastreabilidade e comunicação interna.</p>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Aluno</strong>
+          <small>Campo: Input de texto</small>
+          <p>Identifica o estudante envolvido.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Tipo</strong>
+          <small>Campo: Input de texto</small>
+          <p>Classifique a natureza do evento para facilitar consulta futura.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Descrição</strong>
+          <small>Campo: Textarea</small>
+          <p>Relate o ocorrido, as providências tomadas e o encaminhamento dado.</p>
+        </div>
+      </div>
+    `
+  },
+  frequencia: {
+    title: '✏️ Frequência',
+    content: `
+      <p><strong>Descrição:</strong> Controle diário de presença por aluno e turma.</p>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Data</strong>
+          <small>Campo: Data</small>
+          <p>Dia de referência do lançamento.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Turma</strong>
+          <small>Campo: Input de texto</small>
+          <p>Turma vinculada ao registro.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Aluno</strong>
+          <small>Campo: Input de texto</small>
+          <p>Nome do aluno com presença registrada.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Presença</strong>
+          <small>Campo: Select</small>
+          <p>Indica se o aluno esteve presente ou ausente no período informado.</p>
+        </div>
+      </div>
+    `
+  },
+  cobrancas: {
+    title: '💰 Cobranças',
+    content: `
+      <p><strong>Descrição:</strong> Registro das mensalidades, taxas e cobranças individuais da escola.</p>
+      <p style="color: var(--text-muted); margin-bottom: 16px;"><strong>Fluxo recomendado:</strong> informe aluno, valor, vencimento e método, revise o status e use a régua para programar lembretes quando necessário.</p>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Aluno</strong>
+          <small>Campo: Input de texto</small>
+          <p>Identifica quem está vinculado à cobrança.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Valor</strong>
+          <small>Campo: Número decimal</small>
+          <p>Montante cobrado em reais.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Vencimento</strong>
+          <small>Campo: Data</small>
+          <p>Prazo previsto para pagamento.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Método</strong>
+          <small>Campo: Select</small>
+          <p>Forma de pagamento associada à cobrança.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Status</strong>
+          <small>Campo: Select</small>
+          <p>Indica se a cobrança está pendente, paga ou atrasada.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Recorrência</strong>
+          <small>Campo: Checkbox</small>
+          <p>Use para cobranças periódicas, como mensalidades.</p>
+        </div>
+      </div>
+    `
+  },
+  regua: {
+    title: '📈 Régua',
+    content: `
+      <p><strong>Descrição:</strong> Programação de lembretes de cobrança por canal e data de envio.</p>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>ID da Cobrança</strong>
+          <small>Campo: Input de texto</small>
+          <p>Referência da cobrança que receberá o lembrete.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Canal</strong>
+          <small>Campo: Select</small>
+          <p>Escolha entre e-mail, SMS ou aplicativo conforme o fluxo configurado.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Data do Lembrete</strong>
+          <small>Campo: Data</small>
+          <p>Define quando a automação deverá processar o envio.</p>
+        </div>
+      </div>
+    `
+  },
+  extras: {
+    title: '➕ Extras',
+    content: `
+      <p><strong>Descrição:</strong> Lançamento de serviços, materiais ou períodos adicionais fora da cobrança principal.</p>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Aluno</strong>
+          <small>Campo: Input de texto</small>
+          <p>Aluno vinculado ao item adicional.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Descrição</strong>
+          <small>Campo: Input de texto</small>
+          <p>Identifica o serviço ou material cobrado.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Valor</strong>
+          <small>Campo: Número decimal</small>
+          <p>Valor financeiro do item extra.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Competência</strong>
+          <small>Campo: Mês</small>
+          <p>Mês de referência para consolidação financeira.</p>
+        </div>
+      </div>
+    `
+  },
+  caixa: {
+    title: '💼 Fluxo de Caixa',
+    content: `
+      <p><strong>Descrição:</strong> Controle das entradas e saídas financeiras da unidade.</p>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Tipo</strong>
+          <small>Campo: Select</small>
+          <p>Defina se o lançamento é a receber ou a pagar.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Descrição</strong>
+          <small>Campo: Input de texto</small>
+          <p>Resumo objetivo da movimentação.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Valor</strong>
+          <small>Campo: Número decimal</small>
+          <p>Valor da movimentação.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Vencimento</strong>
+          <small>Campo: Data</small>
+          <p>Data prevista ou efetiva do movimento.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Número da Nota</strong>
+          <small>Campo: Input de texto opcional</small>
+          <p>Use para auditoria e conciliação documental.</p>
+        </div>
+      </div>
+    `
+  },
+  matriculas: {
+    title: '📚 Matrículas',
+    content: `
+      <p><strong>Descrição:</strong> Cadastro completo do aluno e do responsável, com documentos, foto, turma e dados contratuais.</p>
+      <p style="color: var(--text-muted); margin-bottom: 16px;"><strong>Fluxo recomendado:</strong> preencha os dados do aluno, revise os dados do responsável, consulte o CEP, anexe documentos e finalize a matrícula antes de gerar acessos complementares.</p>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Dados principais</strong>
+          <small>Campos: Aluno, responsável e turma</small>
+          <p>Formam a base do cadastro acadêmico e administrativo.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Contato do responsável</strong>
+          <small>Campos: E-mail, CPF e telefone</small>
+          <p>Usados para comunicação, vínculo de acesso e rotinas financeiras.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Endereço</strong>
+          <small>Campos: CEP e logradouro</small>
+          <p>Podem ser preenchidos com apoio da busca automática por CEP.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Documentos e foto</strong>
+          <small>Campos: Upload, câmera e links</small>
+          <p>Centralizam a documentação do aluno no processo de ingresso.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Contrato assinado</strong>
+          <small>Campo: Checkbox</small>
+          <p>Indica a formalização do vínculo contratual.</p>
+        </div>
+      </div>
+    `
+  },
+  alunos: {
+    title: '👤 Alunos',
+    content: `
+      <p><strong>Descrição:</strong> Consulta operacional da base de alunos já vinculada às matrículas da escola.</p>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Lista de alunos</strong>
+          <small>Campo: Painel de consulta</small>
+          <p>Exibe os registros consolidados para conferência e apoio aos demais módulos.</p>
+        </div>
+      </div>
+    `
+  },
+  prontuarios: {
+    title: '📁 Prontuários',
+    content: `
+      <p><strong>Descrição:</strong> Arquivo documental do aluno com filtro por turma e professor, preview de anexos e observações de validade ou pendência.</p>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Filtros</strong>
+          <small>Campos: Turma, professor e busca por aluno</small>
+          <p>Facilitam a localização dos documentos cadastrados.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Aluno e Tipo</strong>
+          <small>Campos: Seleção do aluno e tipo do documento</small>
+          <p>Identificam o prontuário que será salvo.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Arquivos</strong>
+          <small>Campos: URLs, upload múltiplo e preview</small>
+          <p>Permitem anexar documentos digitalizados com acompanhamento visual.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Observação</strong>
+          <small>Campo: Textarea</small>
+          <p>Registre validade, pendências e notas administrativas.</p>
+        </div>
+      </div>
+    `
+  },
+  usuarios: {
+    title: '👥 Usuários',
+    content: `
+      <p><strong>Descrição:</strong> Criação e atualização de contas de acesso da escola, com perfil e vínculo institucional.</p>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Novo usuário</strong>
+          <small>Campos: Nome, e-mail, senha e perfil</small>
+          <p>Cria a conta de autenticação e o cadastro operacional do usuário.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Atualização de acesso</strong>
+          <small>Campos: Seleção do usuário, UID, escola e perfil</small>
+          <p>Permite corrigir escopo e permissões conforme a função do colaborador.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Usuários de responsáveis</strong>
+          <small>Campo: Botão de manutenção</small>
+          <p>Gera acessos de famílias a partir das matrículas existentes.</p>
+        </div>
+      </div>
+    `
+  },
+  turmas: {
+    title: '🏫 Turmas',
+    content: `
+      <p><strong>Descrição:</strong> Cadastro das turmas e das faixas etárias utilizadas na organização pedagógica e administrativa.</p>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Turma</strong>
+          <small>Campos: Nome, faixa etária, limite e professor</small>
+          <p>Estrutura a composição das salas e sua capacidade.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Faixa etária</strong>
+          <small>Campos: Nome e descrição</small>
+          <p>Padroniza a classificação das turmas e relatórios pedagógicos.</p>
+        </div>
+      </div>
+    `
+  },
+  portaria: {
+    title: '🚪 Portaria',
+    content: `
+      <p><strong>Descrição:</strong> Registro de retirada com foco em segurança, identificação do retirante e rastreabilidade.</p>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Aluno</strong>
+          <small>Campo: Input de texto</small>
+          <p>Indica quem está deixando a unidade.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Retirado por</strong>
+          <small>Campos: Nome e parentesco</small>
+          <p>Identifica a pessoa responsável pela retirada.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Documento e foto</strong>
+          <small>Campos: RG e URL da foto</small>
+          <p>Servem para conferência da identidade no momento do atendimento.</p>
+        </div>
+      </div>
+      <p style="color: var(--text-muted); margin-top: 16px;"><strong>Boas práticas:</strong> confirme a autorização previamente cadastrada e registre a retirada sem abreviações ou dados incompletos.</p>
+    `
+  },
+  lgpd: {
+    title: '🔐 LGPD',
+    content: `
+      <p><strong>Descrição:</strong> Formalização de consentimentos para tratamento de dados pessoais de menores, com escopos separados por finalidade.</p>
+      <div class="fields-grid">
+        <div class="field-doc">
+          <strong>Aluno e responsável legal</strong>
+          <small>Campos: Seleção do aluno e responsável</small>
+          <p>Definem o titular dos dados e quem concede o consentimento.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Comunicação institucional</strong>
+          <small>Campo: Radio SIM/NÃO</small>
+          <p>Controla o uso de dados em canais de aviso e relacionamento escolar.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Fotos e vídeos pedagógicos</strong>
+          <small>Campo: Radio SIM/NÃO</small>
+          <p>Define se registros de rotina podem ser compartilhados em canais fechados da turma.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Eventos e redes sociais</strong>
+          <small>Campo: Radio SIM/NÃO</small>
+          <p>Regula a divulgação institucional em eventos, site e redes oficiais.</p>
+        </div>
+        <div class="field-doc">
+          <strong>Modo de edição</strong>
+          <small>Campo: Atualização de consentimento</small>
+          <p>Permite revisar o termo sem perder a consistência do cadastro existente.</p>
+        </div>
+      </div>
+    `
+  }
+});
+
+function getPreferredHelpKey() {
+  const activeItem = document.querySelector('.nav-item.active');
+  if (!activeItem) {
+    return null;
+  }
+
+  const activeSection = activeItem.getAttribute('data-section');
+  return manualData[activeSection] ? activeSection : null;
+}
 
 // Inicializar tema ao carregar a página
 function initTheme() {
@@ -746,10 +1390,8 @@ function openHelp(moduleKey = null) {
   if (moduleKey && manualData[moduleKey]) {
     content.innerHTML = renderManualContent(moduleKey);
   } else {
-    // Mostrar índice completo
-    const modules = Object.keys(manualData);
-    let indexHTML = '<div class="manual-section"><h3>📚 Índice de Módulos</h3><p>Clique em um módulo na sidebar para acessar seu manual.</p>';
-    modules.forEach(key => {
+    let indexHTML = '<div class="manual-section"><h3>📚 Índice de Módulos</h3><p>Selecione o módulo desejado. O índice abaixo segue a mesma ordem da navegação lateral do sistema.</p>';
+    manualOrder.forEach(key => {
       indexHTML += `<p style="margin-bottom: 12px;"><a href="#" onclick="openHelp('${key}'); return false;" style="color: var(--primary-light); text-decoration: none; cursor: pointer;">${manualData[key].title}</a></p>`;
     });
     indexHTML += '</div>';
@@ -778,7 +1420,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Botão de ajuda
   const helpBtn = document.getElementById('helpBtn');
   if (helpBtn) {
-    helpBtn.addEventListener('click', () => openHelp());
+    helpBtn.addEventListener('click', () => openHelp(getPreferredHelpKey()));
   }
   
   // Fechar ajuda

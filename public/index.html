@@ -267,11 +267,115 @@
                     <section class="card">
                         <div class="card-head" style="background:#2370bb;">Pedagogico - Planejamento</div>
                         <div class="card-body">
-                            <input id="planTurma" class="field" placeholder="Turma">
-                            <input id="planFaixa" class="field" placeholder="Faixa etaria">
-                            <textarea id="planAtividades" class="field" rows="3" placeholder="Planejamento de aulas"></textarea>
-                            <button class="btn" id="btnPlan">Salvar planejamento</button>
+                            <div class="row">
+                                <select id="planTurma" class="field"><option value="">Turma de referencia</option></select>
+                                <select id="planFaixa" class="field"><option value="">Faixa etaria principal</option></select>
+                            </div>
+                            <div class="planning-toolbar">
+                                <button class="btn" id="btnPlan">Salvar planejamento</button>
+                                <button class="btn btn-secondary" id="btnPlanReset" type="button">Restaurar modelo</button>
+                                <button class="btn btn-secondary" id="btnPlanPrint" type="button">Imprimir plano</button>
+                            </div>
                             <p class="ok" id="okPlan">Planejamento salvo.</p>
+                            <p class="small planning-note">Edite diretamente os textos do plano, ajuste as metas e personalize cada etapa conforme a escola.</p>
+                            <template id="planEditorTemplate">
+                                <div class="planning-surface">
+                                    <header class="planning-header">
+                                        <h1 contenteditable="true" data-plan-role="title">Planejamento Pedagogico Anual</h1>
+                                        <p contenteditable="true" data-plan-role="subtitle">Educacao Infantil • Alinhado a BNCC</p>
+                                    </header>
+
+                                    <div class="planning-info-grid">
+                                        <div><strong>Instituicao:</strong> <span contenteditable="true" data-plan-role="institution">Nome da Escola</span></div>
+                                        <div><strong>Ano Letivo:</strong> <span contenteditable="true" data-plan-role="year">2026</span></div>
+                                        <div><strong>Coordenador(a):</strong> <span contenteditable="true" data-plan-role="coordinator">Nome do Coordenador</span></div>
+                                        <div><strong>Tema Norteador:</strong> <span contenteditable="true" data-plan-role="theme">Tema do Ano/Semestre</span></div>
+                                    </div>
+
+                                    <section class="planning-metas-section">
+                                        <h3>Metas Gerais para o Trimestre</h3>
+                                        <ul class="planning-metas-list">
+                                            <li contenteditable="true">Consolidar os processos de acolhimento e adaptacao escolar de forma humanizada.</li>
+                                            <li contenteditable="true">Fortalecer os vinculos de parceria e comunicacao integrada entre a escola e as familias.</li>
+                                            <li contenteditable="true">Implementar rotinas pedagogicas baseadas nos direitos de aprendizagem da BNCC.</li>
+                                            <li contenteditable="true">Alinhar as praticas de observacao diaria aos criterios de avaliacao formativa da escola.</li>
+                                        </ul>
+                                    </section>
+
+                                    <section class="planning-stage-section">
+                                        <h2 contenteditable="true">Maternal 1 (1 a 2 anos)</h2>
+                                        <div class="planning-bncc-fields">
+                                            <span class="planning-badge">O eu, o outro e o nos <span class="planning-bncc-code">EI01EO01</span></span>
+                                            <span class="planning-badge">Corpo, gestos e movimentos <span class="planning-bncc-code">EI01CG02</span></span>
+                                            <span class="planning-badge">Tracos, sons, cores e formas <span class="planning-bncc-code">EI01TS01</span></span>
+                                        </div>
+                                        <table class="planning-table">
+                                            <tr><th>Objetivos de Aprendizagem</th><td contenteditable="true">Estimular a marcha, exploracao sensorial, fala inicial e acolhimento seguro.</td></tr>
+                                            <tr><th>Estrategias / Atividades</th><td contenteditable="true">Caixas sensoriais, circuitos com almofadas, cantigas interativas e imitacao de sons.</td></tr>
+                                            <tr><th>Recursos Didaticos</th><td contenteditable="true">Tecidos variados, brinquedos sonoros, almofadas e tapete emborrachado.</td></tr>
+                                            <tr class="planning-row-pcd"><th>Observacoes AEE / PCD</th><td contenteditable="true">Garantir caminhos livres de obstaculos, pistas visuais de rotina e texturas adaptadas.</td></tr>
+                                            <tr><th>Rotina / Cuidados</th><td contenteditable="true">Transicao suave casa-escola, higienizacao acolhedora e organizacao da hora do sono.</td></tr>
+                                            <tr><th>Avaliacao</th><td contenteditable="true">Registros diarios, observacao de marcos motores e portfolio de evidencias.</td></tr>
+                                        </table>
+                                    </section>
+
+                                    <section class="planning-stage-section">
+                                        <h2 contenteditable="true">Maternal 2 (2 a 3 anos)</h2>
+                                        <div class="planning-bncc-fields">
+                                            <span class="planning-badge">O eu, o outro e o nos <span class="planning-bncc-code">EI02EO02</span></span>
+                                            <span class="planning-badge">Escuta, fala, pensamento e imaginacao <span class="planning-bncc-code">EI02EF01</span></span>
+                                            <span class="planning-badge">Espacos, tempos e quantidades <span class="planning-bncc-code">EI02ET05</span></span>
+                                        </div>
+                                        <table class="planning-table">
+                                            <tr><th>Objetivos de Aprendizagem</th><td contenteditable="true">Ampliar vocabulario, identidade, partilha e regras simples de convivencia.</td></tr>
+                                            <tr><th>Estrategias / Atividades</th><td contenteditable="true">Brincadeiras no espelho, historias com fantoches, pintura a dedo e colagem rustica.</td></tr>
+                                            <tr><th>Recursos Didaticos</th><td contenteditable="true">Espelho seguro, fantoches, tintas atoxicas, papel pardo e blocos de montar.</td></tr>
+                                            <tr class="planning-row-pcd"><th>Observacoes AEE / PCD</th><td contenteditable="true">Flexibilizar o tempo de foco, usar apoio sensorial e suporte fisico nas tarefas manuais.</td></tr>
+                                            <tr><th>Rotina / Cuidados</th><td contenteditable="true">Acompanhar desfralde consciente e estimular autonomia na organizacao dos brinquedos.</td></tr>
+                                            <tr><th>Avaliacao</th><td contenteditable="true">Relatorios individuais, observacao da linguagem oral e interacao social com a turma.</td></tr>
+                                        </table>
+                                    </section>
+
+                                    <section class="planning-stage-section">
+                                        <h2 contenteditable="true">Primeiro Periodo (3 a 4 anos)</h2>
+                                        <div class="planning-bncc-fields">
+                                            <span class="planning-badge">Corpo, gestos e movimentos <span class="planning-bncc-code">EI03CG05</span></span>
+                                            <span class="planning-badge">Escuta, fala, pensamento e imaginacao <span class="planning-bncc-code">EI03EF03</span></span>
+                                            <span class="planning-badge">Espacos, tempos e quantidades <span class="planning-bncc-code">EI03ET01</span></span>
+                                        </div>
+                                        <table class="planning-table">
+                                            <tr><th>Objetivos de Aprendizagem</th><td contenteditable="true">Aprimorar motricidade fina, reconhecer o proprio nome e estruturar nocoes espaciais.</td></tr>
+                                            <tr><th>Estrategias / Atividades</th><td contenteditable="true">Recorte, modelagem, jogos de encaixe e circuitos de motricidade ampla.</td></tr>
+                                            <tr><th>Recursos Didaticos</th><td contenteditable="true">Massinha, tesouras sem ponta, revistas, cones e materiais de pátio.</td></tr>
+                                            <tr class="planning-row-pcd"><th>Observacoes AEE / PCD</th><td contenteditable="true">Utilizar tesouras adaptadas, apoio de mediacao e recursos de preensao quando necessario.</td></tr>
+                                            <tr><th>Rotina / Organizacao</th><td contenteditable="true">Organizar pequenos grupos, rotinas de apoio entre pares e ajudante do dia.</td></tr>
+                                            <tr><th>Avaliacao</th><td contenteditable="true">Portfolio fisico, registros de hipoteses de escrita e observacao do desenvolvimento socioemocional.</td></tr>
+                                        </table>
+                                    </section>
+
+                                    <section class="planning-stage-section">
+                                        <h2 contenteditable="true">Segundo Periodo (4 a 5 anos)</h2>
+                                        <div class="planning-bncc-fields">
+                                            <span class="planning-badge">O eu, o outro e o nos <span class="planning-bncc-code">EI03EO06</span></span>
+                                            <span class="planning-badge">Escuta, fala, pensamento e imaginacao <span class="planning-bncc-code">EI03EF09</span></span>
+                                            <span class="planning-badge">Espacos, tempos e quantidades <span class="planning-bncc-code">EI03ET07</span></span>
+                                        </div>
+                                        <table class="planning-table">
+                                            <tr><th>Objetivos de Aprendizagem</th><td contenteditable="true">Escrever o nome completo, levantar hipoteses, ampliar a contagem e argumentar ideias.</td></tr>
+                                            <tr><th>Estrategias / Atividades</th><td contenteditable="true">Projetos de investigacao, escrita em contextos ludicos, jogos de regras e desafios matematicos.</td></tr>
+                                            <tr><th>Recursos Didaticos</th><td contenteditable="true">TV, jogos de tabuleiro, lupas, alfabeto movel e fichas numericas.</td></tr>
+                                            <tr class="planning-row-pcd"><th>Observacoes AEE / PCD</th><td contenteditable="true">Disponibilizar abafadores de ruido, materiais ampliados e apoio visual para organizacao da rotina.</td></tr>
+                                            <tr><th>Rotina / Organizacao</th><td contenteditable="true">Roda de conversa diaria e ampliacao progressiva das tarefas individuais.</td></tr>
+                                            <tr><th>Avaliacao</th><td contenteditable="true">Fichas de acompanhamento, relatorios semestrais e analise das competencias socioemocionais.</td></tr>
+                                        </table>
+                                    </section>
+
+                                    <footer class="planning-footer">
+                                        Documento gerado eletronicamente • Ultima atualizacao em: <span data-plan-role="updated-at">-</span>
+                                    </footer>
+                                </div>
+                            </template>
+                            <div id="planEditor" class="planning-editor" aria-label="Editor de planejamento pedagogico"></div>
                             <div id="listPlanejamento" class="list"></div>
                         </div>
                     </section>
