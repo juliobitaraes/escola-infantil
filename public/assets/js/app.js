@@ -36,6 +36,8 @@ const criarDiretorEscolaFn = httpsCallable(functions, "criarDiretorEscola");
 const criarUsuarioEscolaFn = httpsCallable(functions, "criarUsuarioEscola");
 const resetDiretorSenhaFn = httpsCallable(functions, "resetDiretorSenha");
 const setDiretorStatusFn = httpsCallable(functions, "setDiretorStatus");
+const criarResponsavelDeMatriculaFn = httpsCallable(functions, "criarResponsavelDeMatricula");
+const migrarResponsaveisUsuariosFn = httpsCallable(functions, "migrarResponsaveisUsuarios");
 const SUPERUSER_EMAIL = "julio.bitaraes.mail@gmail.com";
 const STORAGE_UPLOAD_FUNCTION_URL = "https://uploadmatriculadocumento-ry5gli47hq-rj.a.run.app";
 const STORAGE_DELETE_FUNCTION_URL = "https://deletematriculadocumento-ry5gli47hq-rj.a.run.app";
@@ -76,6 +78,7 @@ let pendingProntuarioDocumentos = [];
 let prontuarioPreviewRequestId = 0;
 let editingMatriculaId = null;
 let editingLgpdConsentId = null;
+let editingBnccReportId = null;
 
 const LGPD_NOTICE_MESSAGE = [
   "Comunicado Importante: Proteção de Imagem dos Nossos Alunos",
@@ -92,6 +95,50 @@ const AGENDA_STATUS_LABELS = {
   enviado: "Enviado",
   corrigido: "Corrigido",
   leitura_confirmada: "Leitura confirmada"
+};
+
+const CHAT_ROLE_TARGETS = ["direcao", "secretaria", "coordenacao"];
+const CHAT_ROLE_LABELS = {
+  direcao: "Direcao",
+  secretaria: "Secretaria",
+  coordenacao: "Coordenacao"
+};
+
+const BNCC_MATRIZ = {
+  EI01: [
+    { campo: "O eu, o outro e o nos", codigo: "EI01EO01", desc: "Perceber que suas acoes tem efeito nas outras criancas e nos adultos." },
+    { campo: "O eu, o outro e o nos", codigo: "EI01EO02", desc: "Perceber as possibilidades e os limites de seu corpo nas brincadeiras e interacoes." },
+    { campo: "Corpo, gestos e movimentos", codigo: "EI01CG02", desc: "Experimentar as possibilidades corporais nas interacoes e brincadeiras em ambientes diversos." },
+    { campo: "Corpo, gestos e movimentos", codigo: "EI01CG05", desc: "Utilizar os movimentos de preensao, encaixe e lancamento, ampliando suas habilidades motoras." },
+    { campo: "Tracos, sons, cores e formas", codigo: "EI01TS01", desc: "Explorar sons produzidos com o proprio corpo e com objetos do ambiente." },
+    { campo: "Escuta, fala, pensamento e imaginacao", codigo: "EI01EF01", desc: "Reconhecer quando e chamado por seu nome e centrar a atencao quando interpelado." },
+    { campo: "Escuta, fala, pensamento e imaginacao", codigo: "EI01EF06", desc: "Comunicar-se com outras pessoas usando gestos, balbucios, palavras e expressoes." },
+    { campo: "Espacos, tempos, quantidades", codigo: "EI01ET01", desc: "Explorar e descobrir as propriedades de objetos e materiais (odor, cor, sabor, temperatura)." },
+    { campo: "Espacos, tempos, quantidades", codigo: "EI01ET05", desc: "Manipular objetos e brinquedos de diferentes formas, texturas e tamanhos." }
+  ],
+  EI02: [
+    { campo: "O eu, o outro e o nos", codigo: "EI02EO01", desc: "Demonstrar atitudes de cuidado e solidariedade na interacao com criancas e adultos." },
+    { campo: "O eu, o outro e o nos", codigo: "EI02EO04", desc: "Comunicar-se com os colegas e os adultos, buscando compreende-los e fazendo-se compreender." },
+    { campo: "Corpo, gestos e movimentos", codigo: "EI02CG01", desc: "Deslocar-se no espaco com destreza ao correr, pular, saltar, dancar, escorregar e girar." },
+    { campo: "Corpo, gestos e movimentos", codigo: "EI02CG05", desc: "Desenvolver progressivamente as habilidades manuais, adquirindo controle para desenhar, pintar, rasgar e folhear." },
+    { campo: "Tracos, sons, cores e formas", codigo: "EI02TS02", desc: "Utilizar materiais variados com possibilidades de manipulacao, explorando cores, texturas, superficies e planos." },
+    { campo: "Escuta, fala, pensamento e imaginacao", codigo: "EI02EF01", desc: "Dialogar com criancas e adultos, expressando desejos, necessidades, sentimentos e ideias." },
+    { campo: "Escuta, fala, pensamento e imaginacao", codigo: "EI02EF05", desc: "Relatar fatos acontecidos, historias ouvidas e vivencias cotidianas em sequencia temporal." },
+    { campo: "Espacos, tempos, quantidades", codigo: "EI02ET05", desc: "Classificar objetos, considerando determinado atributo (tamanho, peso, cor e forma)." },
+    { campo: "Espacos, tempos, quantidades", codigo: "EI02ET07", desc: "Contar oralmente objetos, pessoas e livros em contextos diversos." }
+  ],
+  EI03: [
+    { campo: "O eu, o outro e o nos", codigo: "EI03EO01", desc: "Demonstrar empatia pelos outros, percebendo sentimentos, necessidades e formas de agir diferentes." },
+    { campo: "O eu, o outro e o nos", codigo: "EI03EO04", desc: "Comunicar suas ideias e sentimentos a pessoas e grupos diversos." },
+    { campo: "Corpo, gestos e movimentos", codigo: "EI03CG02", desc: "Demonstrar controle e adequacao do uso do corpo em jogos, brincadeiras, danca e atividades artisticas." },
+    { campo: "Corpo, gestos e movimentos", codigo: "EI03CG05", desc: "Coordenar habilidades manuais no atendimento de necessidades cotidianas." },
+    { campo: "Tracos, sons, cores e formas", codigo: "EI03TS02", desc: "Expressar-se por meio de desenho, pintura, colagem, dobradura e escultura." },
+    { campo: "Escuta, fala, pensamento e imaginacao", codigo: "EI03EF01", desc: "Expressar ideias, desejos e sentimentos por meio da linguagem oral e escrita espontanea." },
+    { campo: "Escuta, fala, pensamento e imaginacao", codigo: "EI03EF03", desc: "Escolher e folhear livros, orientando-se por temas e ilustracoes e tentando identificar palavras conhecidas." },
+    { campo: "Escuta, fala, pensamento e imaginacao", codigo: "EI03EF06", desc: "Produzir narrativas orais e textos escritos (escrita espontanea), tendo o professor como escriba." },
+    { campo: "Espacos, tempos, quantidades", codigo: "EI03ET05", desc: "Classificar objetos e figuras de acordo com suas propriedades cognitivas." },
+    { campo: "Espacos, tempos, quantidades", codigo: "EI03ET07", desc: "Relacionar numeros as respectivas quantidades e identificar antes, depois e entre em sequencias." }
+  ]
 };
 
 function normalizeEmail(value) {
@@ -280,6 +327,462 @@ function populateProfessorOptions() {
   }
 }
 
+function chatRoleLabel(role) {
+  return CHAT_ROLE_LABELS[String(role || "").trim()] || String(role || "").trim() || "-";
+}
+
+function populateChatTurmaFilterOptions() {
+  const turmaSelect = document.getElementById("chatTurmaFiltro");
+  if (!(turmaSelect instanceof HTMLSelectElement)) return;
+
+  if (isFamilyOnlyRole()) {
+    turmaSelect.classList.add("hidden");
+    turmaSelect.value = "";
+    return;
+  }
+
+  turmaSelect.classList.remove("hidden");
+  const previousValue = turmaSelect.value;
+  const turmas = Array.from(
+    new Set(
+      cachedStudents
+        .map(({ data }) => String(data.turma || "").trim())
+        .filter(Boolean)
+    )
+  ).sort((a, b) => String(a).localeCompare(String(b)));
+
+  turmaSelect.innerHTML = "<option value=\"\">Todas as turmas</option>";
+  turmas.forEach((turma) => {
+    const option = document.createElement("option");
+    option.value = turma;
+    option.textContent = turma;
+    turmaSelect.appendChild(option);
+  });
+
+  if (previousValue && turmas.includes(previousValue)) {
+    turmaSelect.value = previousValue;
+  }
+}
+
+function populateChatRecipientOptions() {
+  const paraSelect = document.getElementById("chatPara");
+  if (!(paraSelect instanceof HTMLSelectElement)) return;
+  const turmaSelect = document.getElementById("chatTurmaFiltro");
+  const selectedTurma = turmaSelect instanceof HTMLSelectElement ? String(turmaSelect.value || "").trim() : "";
+
+  const previousValue = paraSelect.value;
+  paraSelect.innerHTML = "";
+
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Selecione o destinatario";
+  paraSelect.appendChild(placeholder);
+
+  if (isFamilyOnlyRole()) {
+    CHAT_ROLE_TARGETS.forEach((roleName) => {
+      const option = document.createElement("option");
+      option.value = roleName;
+      option.textContent = chatRoleLabel(roleName);
+      option.dataset.scope = "role";
+      option.dataset.role = roleName;
+      option.dataset.label = chatRoleLabel(roleName);
+      paraSelect.appendChild(option);
+    });
+    if (previousValue && CHAT_ROLE_TARGETS.includes(previousValue)) {
+      paraSelect.value = previousValue;
+    }
+    return;
+  }
+
+  const responsaveis = new Map();
+  cachedStudents.forEach(({ data }) => {
+    const turma = String(data.turma || "").trim();
+    if (selectedTurma && turma !== selectedTurma) return;
+    const uid = String(data.responsavel_uid || "").trim();
+    const nome = String(data.responsavel_nome || data.responsavel || "").trim();
+    if (!uid) return;
+    if (!responsaveis.has(uid)) {
+      responsaveis.set(uid, {
+        uid,
+        nome: nome || uid,
+        turmas: new Set()
+      });
+    }
+    if (turma) {
+      responsaveis.get(uid).turmas.add(turma);
+    }
+  });
+
+  const rows = Array.from(responsaveis.values()).sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+  rows.forEach((row) => {
+    const turmasLabel = Array.from(row.turmas).sort((a, b) => String(a).localeCompare(String(b))).join(", ");
+    const option = document.createElement("option");
+    option.value = row.uid;
+    option.textContent = turmasLabel ? `${row.nome} (${turmasLabel})` : row.nome;
+    option.dataset.scope = "uid";
+    option.dataset.uid = row.uid;
+    option.dataset.label = row.nome;
+    paraSelect.appendChild(option);
+  });
+
+  if (previousValue && rows.some((row) => row.uid === previousValue)) {
+    paraSelect.value = previousValue;
+  }
+}
+
+function canCurrentUserReadChatMessage(data) {
+  const myUid = auth.currentUser?.uid || "";
+  if (!myUid) return false;
+  if (String(data.de_uid || "") === myUid) return true;
+
+  const paraUid = String(data.para_uid || "").trim();
+  if (paraUid) {
+    return paraUid === myUid;
+  }
+
+  const paraRole = String(data.para_role || "").trim();
+  if (paraRole) {
+    return paraRole === String(currentProfile.role || "").trim();
+  }
+
+  // Mantem mensagens antigas sem roteamento explicito visiveis.
+  return true;
+}
+
+function renderChatMessageItem(id, data) {
+  const div = document.createElement("div");
+  div.className = "item chat-item";
+
+  const sender = String(data.de_nome || data.de_email || "usuario").trim() || "usuario";
+  const targetLabel = String(data.para || "").trim() || (data.para_role ? chatRoleLabel(data.para_role) : "destinatario");
+  const readBy = data.read_by && typeof data.read_by === "object" ? data.read_by : {};
+  const myUid = auth.currentUser?.uid || "";
+  const isReadByMe = Boolean(readBy[myUid]);
+  const totalReads = Object.keys(readBy).length;
+
+  if (!isReadByMe) {
+    div.classList.add("chat-unread");
+  }
+
+  const leituraButton = isReadByMe
+    ? ""
+    : `<button type="button" class="chat-read-btn" data-chat-id="${escapeHtml(id)}">Confirmar leitura</button>`;
+  const mensagem = escapeHtml(String(data.mensagem || "Sem mensagem")).replace(/\n/g, "<br>");
+
+  div.innerHTML = `
+    <strong>${escapeHtml(sender)}</strong>
+    <div class="line">Para: ${escapeHtml(targetLabel)}</div>
+    <div class="line">${mensagem}</div>
+    <div class="line">Leituras confirmadas: ${totalReads}</div>
+    <div class="line">Seu status: ${isReadByMe ? "lida" : "pendente"} ${leituraButton}</div>
+    <p class="small">${formatDate(data.created_at)}</p>
+  `;
+  return div;
+}
+
+async function markChatMessageAsRead(chatMessageId) {
+  if (!chatMessageId || !auth.currentUser) return;
+
+  const ref = doc(db, "chat_mensagens", chatMessageId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+
+  const data = snap.data() || {};
+  const currentReadBy = data.read_by && typeof data.read_by === "object" ? data.read_by : {};
+  if (currentReadBy[auth.currentUser.uid]) return;
+
+  await setDoc(
+    ref,
+    withSchoolScope({
+      read_by: {
+        ...currentReadBy,
+        [auth.currentUser.uid]: new Date().toISOString()
+      },
+      updated_at: serverTimestamp()
+    }),
+    { merge: true }
+  );
+  await audit("update", "chat_mensagens.leitura");
+}
+
+function updateChatUnreadBadge(rows) {
+  const badge = document.getElementById("chatUnreadBadge");
+  if (!badge) return;
+  const myUid = auth.currentUser?.uid || "";
+  const unread = (Array.isArray(rows) ? rows : []).filter((row) => {
+    if (String(row.data.de_uid || "") === myUid) return false;
+    const readBy = row.data.read_by && typeof row.data.read_by === "object" ? row.data.read_by : {};
+    return !Boolean(readBy[myUid]);
+  }).length;
+  badge.textContent = String(unread);
+  badge.classList.toggle("hidden", unread <= 0);
+}
+
+function bnccStatusLabel(value) {
+  if (value === "D") return "Desenvolvido (D)";
+  if (value === "ND") return "Nao Desenvolvido (ND)";
+  return "Em Desenvolvimento (EM)";
+}
+
+function buildBnccPrintableTableRowsHtml() {
+  const tbody = document.getElementById("bnccTabelaCorpo");
+  if (!tbody) return "";
+
+  const rows = Array.from(tbody.querySelectorAll("tr"));
+  return rows.map((row) => {
+    if (row.classList.contains("bncc-group-row")) {
+      const field = String(row.querySelector("td")?.textContent || "").trim();
+      return `<tr class="field-group-row"><td colspan="4">${escapeHtml(field)}</td></tr>`;
+    }
+
+    const codigo = String(row.dataset.codigo || "").trim();
+    const descricao = String(row.dataset.descricao || "").trim();
+    const status = row.querySelector("[data-bncc-status]")?.value || "EM";
+    const evidencia = String(row.querySelector("[data-bncc-evidencia]")?.value || "").trim();
+    const intervencao = String(row.querySelector("[data-bncc-intervencao]")?.value || "").trim();
+
+    const objectiveCell = `${escapeHtml(codigo)}${descricao ? `<br>${escapeHtml(descricao)}` : ""}`;
+    return `
+      <tr>
+        <td>${objectiveCell}</td>
+        <td>${escapeHtml(bnccStatusLabel(status))}</td>
+        <td>${escapeHtml(evidencia).replace(/\n/g, "<br>")}</td>
+        <td>${escapeHtml(intervencao).replace(/\n/g, "<br>")}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function resolveBnccPrintMode(selectedMode) {
+  const mode = String(selectedMode || "auto").trim().toLowerCase();
+  if (mode === "compact" || mode === "read") return mode;
+
+  const objectiveRows = Array.from(document.querySelectorAll("#bnccTabelaCorpo tr[data-bncc-item='1']"));
+  let textSize = 0;
+  objectiveRows.forEach((row) => {
+    const desc = String(row.dataset.descricao || "").trim();
+    const evidencia = String(row.querySelector("[data-bncc-evidencia]")?.value || "").trim();
+    const intervencao = String(row.querySelector("[data-bncc-intervencao]")?.value || "").trim();
+    textSize += desc.length + evidencia.length + intervencao.length;
+  });
+
+  if (objectiveRows.length >= 12 || textSize >= 3800) {
+    return "compact";
+  }
+  return "read";
+}
+
+function bnccPrintStyleFor(modeName) {
+  const mode = resolveBnccPrintMode(modeName);
+  if (mode === "compact") {
+    return {
+      pageMargin: "10mm",
+      colObj: "34%",
+      colAva: "12%",
+      colEvi: "27%",
+      colInt: "27%",
+      cellPadding: "5px 6px",
+      fontSize: "9.4pt",
+      lineHeight: "1.2"
+    };
+  }
+
+  return {
+    pageMargin: "14mm",
+    colObj: "35%",
+    colAva: "13%",
+    colEvi: "26%",
+    colInt: "26%",
+    cellPadding: "7px 8px",
+    fontSize: "10.2pt",
+    lineHeight: "1.28"
+  };
+}
+
+function printBnccTableOnly(modeName = "auto") {
+  const rowsHtml = buildBnccPrintableTableRowsHtml();
+  if (!rowsHtml.trim()) {
+    alert("Nao foi possivel gerar a tabela BNCC para impressao.");
+    return;
+  }
+  const printStyle = bnccPrintStyleFor(modeName);
+
+  const printWindow = window.open("", "_blank", "width=1100,height=800");
+  if (!printWindow) {
+    alert("O navegador bloqueou a janela de impressao. Permita pop-ups e tente novamente.");
+    return;
+  }
+
+  const html = `
+    <!doctype html>
+    <html lang="pt-BR">
+      <head>
+        <meta charset="utf-8">
+        <title>Ficha BNCC</title>
+        <style>
+          @page {
+            size: A4 portrait;
+            margin: ${printStyle.pageMargin};
+          }
+          html, body {
+            margin: 0;
+            padding: 0;
+            font-family: "Segoe UI", "Arial", sans-serif;
+            color: #111;
+            background: #fff;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+          }
+          col.col-obj { width: ${printStyle.colObj}; }
+          col.col-ava { width: ${printStyle.colAva}; }
+          col.col-evi { width: ${printStyle.colEvi}; }
+          col.col-int { width: ${printStyle.colInt}; }
+          th, td {
+            border: 1px solid #333;
+            padding: ${printStyle.cellPadding};
+            font-size: ${printStyle.fontSize};
+            line-height: ${printStyle.lineHeight};
+            vertical-align: top;
+            text-align: left;
+            word-wrap: break-word;
+            overflow-wrap: anywhere;
+          }
+          thead th {
+            background: #f1f1f1;
+            font-weight: 700;
+          }
+          tr {
+            page-break-inside: avoid;
+          }
+          .field-group-row td {
+            background: #e8eef7;
+            font-weight: 700;
+          }
+        </style>
+      </head>
+      <body>
+        <table>
+          <colgroup>
+            <col class="col-obj">
+            <col class="col-ava">
+            <col class="col-evi">
+            <col class="col-int">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Campo de experiencia / Objetivo</th>
+              <th>Avaliacao</th>
+              <th>Evidencias observadas</th>
+              <th>Planejamento de intervencao</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </body>
+    </html>
+  `;
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+
+  const triggerPrint = () => {
+    printWindow.print();
+    printWindow.close();
+  };
+
+  if (printWindow.document.readyState === "complete") {
+    setTimeout(triggerPrint, 120);
+  } else {
+    printWindow.onload = () => setTimeout(triggerPrint, 120);
+  }
+}
+
+function setBnccEditMode(reportId) {
+  editingBnccReportId = reportId || null;
+  const saveButton = document.getElementById("btnRelatorio");
+  const cancelButton = document.getElementById("btnRelatorioCancelar");
+  if (saveButton) {
+    saveButton.textContent = editingBnccReportId ? "Atualizar relatorio" : "Salvar relatorio";
+  }
+  if (cancelButton) {
+    cancelButton.classList.toggle("hidden", !editingBnccReportId);
+  }
+}
+
+function applyBnccObjetivosToForm(objetivos) {
+  const tableRows = Array.from(document.querySelectorAll("#bnccTabelaCorpo tr[data-bncc-item='1']"));
+  const objetivosList = Array.isArray(objetivos) ? objetivos : [];
+  const byCode = new Map();
+  objetivosList.forEach((item) => {
+    const code = String(item?.codigo || "").trim();
+    if (code) byCode.set(code, item);
+  });
+
+  tableRows.forEach((row, index) => {
+    const code = String(row.dataset.codigo || "").trim();
+    const found = (code && byCode.get(code)) || objetivosList[index] || {};
+    const statusField = row.querySelector("[data-bncc-status]");
+    const evidenciaField = row.querySelector("[data-bncc-evidencia]");
+    const intervencaoField = row.querySelector("[data-bncc-intervencao]");
+    if (statusField) statusField.value = found.status || "EM";
+    if (evidenciaField) evidenciaField.value = found.evidencia || "";
+    if (intervencaoField) intervencaoField.value = found.intervencao || "";
+  });
+}
+
+function loadBnccReportForEdit(reportId, data) {
+  if (!reportId || !data) return;
+
+  const relAluno = document.getElementById("relAluno");
+  const relFaixa = document.getElementById("relFaixa");
+  const relIdade = document.getElementById("relIdade");
+  const relPeriodo = document.getElementById("relPeriodo");
+  const relProfessor = document.getElementById("relProfessor");
+  const relParecerGlobal = document.getElementById("relParecerGlobal");
+
+  if (relAluno) relAluno.value = data.aluno_id || "";
+  if (relFaixa) relFaixa.value = data.faixa_etaria || "EI03";
+  renderBnccMatriz();
+  applyBnccObjetivosToForm(data.objetivos || []);
+
+  if (relIdade) relIdade.value = data.idade || "";
+  if (relPeriodo) relPeriodo.value = data.periodo_letivo || "";
+  if (relProfessor) relProfessor.value = data.professor || "";
+  if (relParecerGlobal) relParecerGlobal.value = data.parecer_global || "";
+
+  setBnccEditMode(reportId);
+}
+
+async function deleteBnccReport(reportId) {
+  if (!reportId) return;
+  if (!confirm("Excluir este relatorio BNCC?")) return;
+  await deleteDoc(doc(db, "relatorios_bncc", reportId));
+  await audit("delete", "relatorios_bncc");
+  if (editingBnccReportId === reportId) {
+    limparFormularioBncc(false);
+  }
+}
+
+function renderBnccReportItem(id, data) {
+  const div = renderItem(
+    `Relatorio BNCC - ${data.aluno || "aluno"}`,
+    [
+      `<span class=\"lgpd-actions\"><button type=\"button\" class=\"bncc-edit-btn\" data-bncc-id=\"${escapeHtml(id)}\">Editar</button><button type=\"button\" class=\"bncc-delete-btn\" data-bncc-id=\"${escapeHtml(id)}\">Excluir</button></span>`,
+      `Faixa: ${data.faixa_etaria || data.campo_bncc || "-"}`,
+      `Objetivos: ${Array.isArray(data.objetivos) ? data.objetivos.length : 0}`,
+      data.parecer_global || data.avaliacao || "Sem avaliacao"
+    ],
+    data.updated_at || data.created_at
+  );
+  div.dataset.bnccId = id;
+  return div;
+}
+
 function populateFaixaEtariaOptions() {
   const faixaSelect = document.getElementById("turmaFaixa");
   if (!faixaSelect) return;
@@ -366,6 +869,191 @@ function populateLgpdAlunoOptions() {
   }
 
   syncLgpdResponsavelFromAluno();
+}
+
+function populateGaleriaAlunoOptions() {
+  const select = document.getElementById("galeriaAluno");
+  if (!select) return;
+  const previousValue = select.value;
+  const alunos = cachedStudents
+    .map(({ id, data }) => ({ id, nome: data.nome || id, turma: data.turma || "" }))
+    .sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+  select.innerHTML = "<option value=\"\">Selecione o aluno</option>";
+  alunos.forEach((aluno) => {
+    const option = document.createElement("option");
+    option.value = aluno.id;
+    option.textContent = aluno.turma ? `${aluno.nome} - ${aluno.turma}` : aluno.nome;
+    select.appendChild(option);
+  });
+  if (previousValue && alunos.some((a) => a.id === previousValue)) select.value = previousValue;
+}
+
+function populateBnccAlunoOptions() {
+  const alunoSelect = document.getElementById("relAluno");
+  if (!alunoSelect) return;
+
+  const previousValue = alunoSelect.value;
+  const alunos = cachedStudents
+    .map(({ id, data }) => ({ id, nome: data.nome || id, turma: data.turma || "" }))
+    .sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+
+  alunoSelect.innerHTML = "<option value=\"\">Selecione o aluno</option>";
+  alunos.forEach((aluno) => {
+    const option = document.createElement("option");
+    option.value = aluno.id;
+    option.textContent = aluno.turma ? `${aluno.nome} - ${aluno.turma}` : aluno.nome;
+    alunoSelect.appendChild(option);
+  });
+
+  if (previousValue && alunos.some((aluno) => aluno.id === previousValue)) {
+    alunoSelect.value = previousValue;
+  }
+}
+
+function renderBnccMatriz() {
+  const faixaSelect = document.getElementById("relFaixa");
+  const tbody = document.getElementById("bnccTabelaCorpo");
+  if (!faixaSelect || !tbody) return;
+
+  const faixa = faixaSelect.value || "EI03";
+  const objetivos = BNCC_MATRIZ[faixa] || [];
+  tbody.innerHTML = "";
+
+  let campoAtual = "";
+  objetivos.forEach((item, index) => {
+    if (item.campo !== campoAtual) {
+      campoAtual = item.campo;
+      const groupRow = document.createElement("tr");
+      groupRow.className = "bncc-group-row";
+      groupRow.innerHTML = `<td colspan="4">${campoAtual}</td>`;
+      tbody.appendChild(groupRow);
+    }
+
+    const row = document.createElement("tr");
+    row.className = "bncc-objective-row";
+    row.dataset.bnccItem = "1";
+    row.dataset.codigo = item.codigo;
+    row.dataset.campo = item.campo;
+    row.dataset.descricao = item.desc;
+    row.dataset.index = String(index);
+
+    row.innerHTML = `
+      <td>
+        <span class="bncc-codigo">${item.codigo}</span>
+        <div class="bncc-desc">${item.desc}</div>
+      </td>
+      <td>
+        <select class="field" data-bncc-status>
+          <option value="D">Desenvolvido (D)</option>
+          <option value="EM" selected>Em Desenvolvimento (EM)</option>
+          <option value="ND">Nao Desenvolvido (ND)</option>
+        </select>
+      </td>
+      <td>
+        <textarea class="field" rows="3" data-bncc-evidencia placeholder="Registre as acoes observadas"></textarea>
+      </td>
+      <td>
+        <textarea class="field" rows="3" data-bncc-intervencao placeholder="Estrategias para desenvolvimento"></textarea>
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+function collectBnccObjetivos() {
+  const tbody = document.getElementById("bnccTabelaCorpo");
+  if (!tbody) return [];
+
+  return Array.from(tbody.querySelectorAll("tr[data-bncc-item='1']")).map((row) => {
+    const status = row.querySelector("[data-bncc-status]")?.value || "EM";
+    const evidencia = row.querySelector("[data-bncc-evidencia]")?.value.trim() || "";
+    const intervencao = row.querySelector("[data-bncc-intervencao]")?.value.trim() || "";
+    return {
+      codigo: row.dataset.codigo || "",
+      campo: row.dataset.campo || "",
+      descricao: row.dataset.descricao || "",
+      status,
+      evidencia,
+      intervencao
+    };
+  });
+}
+
+function formatIdadeAluno(isoDate) {
+  if (!isoDate) return "";
+  const [ano, mes, dia] = isoDate.split("-").map(Number);
+  if (!ano || !mes || !dia) return isoDate;
+  const dataBr = `${String(dia).padStart(2, "0")}/${String(mes).padStart(2, "0")}/${ano}`;
+  const hoje = new Date();
+  let anos = hoje.getFullYear() - ano;
+  let meses = hoje.getMonth() + 1 - mes;
+  if (hoje.getDate() < dia) meses -= 1;
+  if (meses < 0) { anos -= 1; meses += 12; }
+  const parteAnos = anos > 0 ? `${anos} ${anos === 1 ? "ano" : "anos"}` : "";
+  const parteMeses = meses > 0 ? `${meses} ${meses === 1 ? "mes" : "meses"}` : "";
+  const idade = [parteAnos, parteMeses].filter(Boolean).join(" e ") || "menos de 1 mes";
+  return `${dataBr} (${idade})`;
+}
+
+function syncBnccFromAluno() {
+  const alunoId = document.getElementById("relAluno")?.value || "";
+  if (!alunoId) return;
+
+  const alunoEntry = cachedStudents.find(({ id }) => id === alunoId);
+  const alunoData = alunoEntry?.data || {};
+  const turmaNome = alunoData.turma || "";
+
+  // Turma / Período letivo
+  const relPeriodo = document.getElementById("relPeriodo");
+  if (relPeriodo && !relPeriodo.value) relPeriodo.value = turmaNome;
+
+  // Data de nascimento / Idade — formato BR com idade calculada
+  const relIdade = document.getElementById("relIdade");
+  if (relIdade && !relIdade.value && alunoData.data_nascimento) {
+    relIdade.value = formatIdadeAluno(alunoData.data_nascimento);
+  }
+
+  // Professor regente — busca pela turma em cachedTurmas
+  const turmaEntry = cachedTurmas.find(({ data }) => (data.nome || "") === turmaNome);
+  const professorUid = turmaEntry?.data?.professor_uid || turmaEntry?.data?.professor_id || "";
+  const relProfessor = document.getElementById("relProfessor");
+  if (relProfessor && !relProfessor.value && professorUid) {
+    const professorEntry = cachedUsers.find(({ id }) => id === professorUid);
+    if (professorEntry) relProfessor.value = professorEntry.data.nome || professorEntry.data.email || "";
+  }
+
+  // Faixa etária — tenta mapear a partir da turma
+  const faixaId = turmaEntry?.data?.faixa_etaria_id || turmaEntry?.data?.faixa_etaria || "";
+  const relFaixa = document.getElementById("relFaixa");
+  if (relFaixa && faixaId) {
+    const upper = faixaId.toUpperCase();
+    const mapped = ["EI01", "EI02", "EI03"].find((code) => upper.includes(code));
+    if (mapped) {
+      relFaixa.value = mapped;
+      renderBnccMatriz();
+    }
+  }
+}
+
+function limparFormularioBncc(withConfirm = true) {
+  if (withConfirm && !confirm("Tem certeza que deseja limpar os dados da avaliacao BNCC?")) return;
+
+  const relAluno = document.getElementById("relAluno");
+  const relIdade = document.getElementById("relIdade");
+  const relPeriodo = document.getElementById("relPeriodo");
+  const relProfessor = document.getElementById("relProfessor");
+  const relParecerGlobal = document.getElementById("relParecerGlobal");
+  const relFaixa = document.getElementById("relFaixa");
+
+  if (relAluno) relAluno.value = "";
+  if (relIdade) relIdade.value = "";
+  if (relPeriodo) relPeriodo.value = "";
+  if (relProfessor) relProfessor.value = "";
+  if (relParecerGlobal) relParecerGlobal.value = "";
+  if (relFaixa) relFaixa.value = "EI03";
+
+  renderBnccMatriz();
+  setBnccEditMode(null);
 }
 
 function populateAgendaAlunoOptions() {
@@ -1353,6 +2041,7 @@ function setMatriculaEditMode(matriculaId) {
 function clearMatriculaForm() {
   [
     "matAluno",
+    "matDataNascimento",
     "matResp",
     "matRespUid",
     "matRespEmail",
@@ -1396,6 +2085,7 @@ async function loadMatriculaForEdit(matriculaId) {
   }
   const data = snap.data() || {};
   document.getElementById("matAluno").value = data.aluno || "";
+  document.getElementById("matDataNascimento").value = data.data_nascimento || "";
   document.getElementById("matResp").value = data.responsavel || "";
   document.getElementById("matTurma").value = data.turma || "";
   document.getElementById("matRespUid").value = data.responsavel_uid || "";
@@ -1672,27 +2362,36 @@ function isFamilyOnlyRole() {
 }
 
 function applyRoleLayout() {
-  const cards = Array.from(mainGrid.querySelectorAll(":scope > .card"));
   const familyOnly = isFamilyOnlyRole();
   const superadminVisible = isSuperAdmin();
-  
+
   // Mostrar/ocultar dashboard da família
   if (familyDashboard) {
     familyDashboard.classList.toggle("active", familyOnly);
   }
-  
-  // Para responsáveis, mostrar apenas o primeiro card (agenda)
+
   if (familyOnly) {
-    cards.forEach((card, index) => {
-      card.style.display = index === 0 ? "block" : "none";
+    // Esconde todos os grupos do menu lateral exceto o primeiro (COMUNICACAO)
+    const navSections = Array.from(document.querySelectorAll(".sidebar-nav .nav-section"));
+    navSections.forEach((section, index) => {
+      section.style.display = index === 0 ? "" : "none";
     });
+    // Abre a seção agenda por padrão
+    document.querySelectorAll(".nav-item").forEach((item) => item.classList.remove("active"));
+    const agendaItem = document.querySelector('.nav-item[data-section="agenda"]');
+    if (agendaItem) agendaItem.classList.add("active");
+    if (typeof window.showSection === "function") window.showSection("agenda");
   } else {
+    // Restaura todos os grupos do menu lateral
+    document.querySelectorAll(".sidebar-nav .nav-section").forEach((section) => {
+      section.style.display = "";
+    });
+
     // Para staff, manter a secao ativa definida pela navegacao lateral.
     const activeItem = document.querySelector(".nav-item.active");
     let activeSection = activeItem ? activeItem.getAttribute("data-section") : "agenda";
 
     // Evita carregar tela de superadmin para perfis nao-superadmin
-    // quando esse item ficou ativo em uma sessao anterior.
     if (!superadminVisible && activeSection === "superadmin") {
       document.querySelectorAll(".nav-item").forEach((item) => item.classList.remove("active"));
       const agendaItem = document.querySelector('.nav-item[data-section="agenda"]');
@@ -1980,6 +2679,7 @@ async function ensureUserProfile(user) {
     };
     await setDoc(ref, profile);
     currentProfile = profile;
+    window._currentProfileRole = currentProfile.role;
     return;
   }
   const data = snap.data();
@@ -1991,6 +2691,7 @@ async function ensureUserProfile(user) {
     role: superUser ? "superadmin" : data.role || "coordenacao",
     escola_id: data.escola_id || (superUser ? "global" : "escola-padrao")
   };
+  window._currentProfileRole = currentProfile.role;
 }
 
 async function audit(action, area) {
@@ -2022,6 +2723,7 @@ function renderMatriculaItem(data, dateValue) {
   const details = [
     `<span class=\"matricula-actions\"><button type=\"button\" class=\"matricula-edit-btn\">Editar</button><button type=\"button\" class=\"matricula-delete-btn\">Excluir</button></span>`,
     `Responsavel: ${data.responsavel || "-"}`,
+    data.data_nascimento ? `Data de nascimento: ${formatIdadeAluno(data.data_nascimento)}` : "",
     `Responsavel vinculado: ${data.responsavel_nome || data.responsavel || "-"}`,
     `CPF do responsavel: ${formatCpf(data.responsavel_cpf || "") || "-"}`,
     `Telefone do responsavel: ${data.responsavel_telefone || "-"}`,
@@ -2294,7 +2996,7 @@ function attachList(collectionName, containerId, draw, options = {}) {
         return rightTs - leftTs;
       });
     const seenKeys = new Set();
-    const rows = dedupeBy
+    const rowsDeduped = dedupeBy
       ? docs.filter((row) => {
         const key = String(dedupeBy(row.data, row.id) || "").trim().toLowerCase();
         if (!key) return true;
@@ -2303,6 +3005,8 @@ function attachList(collectionName, containerId, draw, options = {}) {
         return true;
       })
       : docs;
+    const filterFn = typeof options.filter === "function" ? options.filter : null;
+    const rows = filterFn ? rowsDeduped.filter((row) => filterFn(row.data)) : rowsDeduped;
     rows.forEach((row) => list.appendChild(draw(row.id, row.data)));
   });
   detachListeners.push(unsubscribe);
@@ -2317,6 +3021,10 @@ function attachUiHandlers() {
   populateMatriculaTurmaOptions();
   populateProntuarioFiltroOptions();
   populateLgpdAlunoOptions();
+  populateBnccAlunoOptions();
+  populateChatTurmaFilterOptions();
+  populateChatRecipientOptions();
+  renderBnccMatriz();
   setAgendaMode();
   applyRoleLayout();
 
@@ -2387,6 +3095,11 @@ function attachUiHandlers() {
     void updateProntuarioDocumentosPreview();
   });
   document.getElementById("lgpdAluno")?.addEventListener("change", syncLgpdResponsavelFromAluno);
+  document.getElementById("relAluno")?.addEventListener("change", syncBnccFromAluno);
+  document.getElementById("chatTurmaFiltro")?.addEventListener("change", populateChatRecipientOptions);
+  document.getElementById("relFaixa").onchange = () => {
+    renderBnccMatriz();
+  };
   const selectedDocsContainer = document.getElementById("matSelectedDocs");
   if (selectedDocsContainer && !selectedDocsContainer.dataset.downloadBinding) {
     selectedDocsContainer.dataset.downloadBinding = "true";
@@ -2711,6 +3424,49 @@ function attachUiHandlers() {
       }
     });
   }
+  const listChat = document.getElementById("listChat");
+  if (listChat && !listChat.dataset.chatBinding) {
+    listChat.dataset.chatBinding = "true";
+    listChat.addEventListener("click", async (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const readButton = target.closest(".chat-read-btn");
+      if (!(readButton instanceof HTMLButtonElement)) return;
+      const chatMessageId = readButton.getAttribute("data-chat-id") || "";
+      if (!chatMessageId) return;
+      readButton.disabled = true;
+      try {
+        await markChatMessageAsRead(chatMessageId);
+      } catch (error) {
+        console.error(error);
+        alert("Nao foi possivel confirmar leitura da mensagem.");
+        readButton.disabled = false;
+      }
+    });
+  }
+  const listRelatoriosBncc = document.getElementById("listRelatoriosBncc");
+  if (listRelatoriosBncc && !listRelatoriosBncc.dataset.bnccBinding) {
+    listRelatoriosBncc.dataset.bnccBinding = "true";
+    listRelatoriosBncc.addEventListener("click", async (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const editButton = target.closest(".bncc-edit-btn");
+      if (editButton instanceof HTMLButtonElement) {
+        const reportId = editButton.getAttribute("data-bncc-id") || "";
+        if (!reportId) return;
+        const snap = await getDoc(doc(db, "relatorios_bncc", reportId));
+        if (!snap.exists()) return;
+        loadBnccReportForEdit(reportId, snap.data() || {});
+        return;
+      }
+      const deleteButton = target.closest(".bncc-delete-btn");
+      if (deleteButton instanceof HTMLButtonElement) {
+        const reportId = deleteButton.getAttribute("data-bncc-id") || "";
+        if (!reportId) return;
+        await deleteBnccReport(reportId);
+      }
+    });
+  }
   document.getElementById("matCep")?.addEventListener("blur", async () => {
     const cepField = document.getElementById("matCep");
     if (!cepField) return;
@@ -2828,6 +3584,7 @@ function attachUiHandlers() {
       tipo: document.getElementById("muralTipo").value.trim(),
       texto: document.getElementById("muralTexto").value.trim(),
       autor: auth.currentUser.email,
+      autor_role: currentProfile.role || "",
       created_at: serverTimestamp()
     }));
     await audit("create", "mural_avisos");
@@ -2835,20 +3592,54 @@ function attachUiHandlers() {
   };
 
   document.getElementById("btnChat").onclick = async () => {
+    const paraSelect = document.getElementById("chatPara");
+    const msgField = document.getElementById("chatMsg");
+    if (!(paraSelect instanceof HTMLSelectElement) || !(msgField instanceof HTMLTextAreaElement)) return;
+    if (!paraSelect.value) {
+      alert("Selecione o destinatario da mensagem.");
+      return;
+    }
+    const mensagem = msgField.value.trim();
+    if (!mensagem) {
+      alert("Digite a mensagem antes de enviar.");
+      return;
+    }
+
+    const option = paraSelect.options[paraSelect.selectedIndex];
+    const scope = option?.dataset.scope || "";
+    const paraUid = option?.dataset.uid || (scope === "uid" ? paraSelect.value : "");
+    const paraRole = option?.dataset.role || (scope === "role" ? paraSelect.value : "");
+    const paraLabel = option?.dataset.label || option?.textContent || paraSelect.value;
+
     await addDoc(collection(db, "chat_mensagens"), withSchoolScope({
-      para: document.getElementById("chatPara").value.trim(),
-      mensagem: document.getElementById("chatMsg").value.trim(),
+      para: paraLabel,
+      para_scope: scope || (paraRole ? "role" : "uid"),
+      para_uid: paraUid || null,
+      para_role: paraRole || null,
+      mensagem,
       de_uid: auth.currentUser.uid,
       de_email: auth.currentUser.email,
+      de_nome: currentProfile.nome || auth.currentUser.email || "",
+      de_role: currentProfile.role || "",
+      read_by: {
+        [auth.currentUser.uid]: new Date().toISOString()
+      },
+      updated_at: serverTimestamp(),
       created_at: serverTimestamp()
     }));
+    msgField.value = "";
     await audit("create", "chat_mensagens");
     showOk("okChat");
   };
 
   document.getElementById("btnGaleria").onclick = async () => {
+    const galeriaSelect = document.getElementById("galeriaAluno");
+    const selectedAlunoId = galeriaSelect.value.trim();
+    const selectedAluno = cachedStudents.find(({ id }) => id === selectedAlunoId);
     await addDoc(collection(db, "galeria_fotos"), withSchoolScope({
-      aluno_turma: document.getElementById("galeriaAluno").value.trim(),
+      aluno_turma: galeriaSelect.options[galeriaSelect.selectedIndex]?.text || selectedAlunoId,
+      aluno_id: selectedAlunoId || null,
+      turma: selectedAluno?.data.turma || null,
       foto_url: document.getElementById("galeriaUrl").value.trim(),
       legenda: document.getElementById("galeriaLegenda").value.trim(),
       created_at: serverTimestamp(),
@@ -2872,15 +3663,72 @@ function attachUiHandlers() {
   };
 
   document.getElementById("btnRelatorio").onclick = async () => {
-    await addDoc(collection(db, "relatorios_bncc"), withSchoolScope({
-      aluno: document.getElementById("relAluno").value.trim(),
-      campo_bncc: document.getElementById("relCampo").value.trim(),
-      avaliacao: document.getElementById("relAvaliacao").value.trim(),
+    const alunoId = document.getElementById("relAluno").value.trim();
+    const faixaEtaria = document.getElementById("relFaixa").value;
+    const idade = document.getElementById("relIdade").value.trim();
+    const periodo = document.getElementById("relPeriodo").value.trim();
+    const professor = document.getElementById("relProfessor").value.trim();
+    const parecerGlobal = document.getElementById("relParecerGlobal").value.trim();
+    const alunoEntry = cachedStudents.find(({ id }) => id === alunoId);
+    const alunoNome = alunoEntry?.data?.nome || alunoId;
+    const turma = alunoEntry?.data?.turma || "";
+
+    if (!alunoId) {
+      alert("Selecione o aluno para salvar o relatorio BNCC.");
+      return;
+    }
+
+    const objetivos = collectBnccObjetivos();
+
+    const payload = withSchoolScope({
+      aluno: alunoNome,
+      aluno_id: alunoId,
+      turma,
+      faixa_etaria: faixaEtaria,
+      idade,
+      periodo_letivo: periodo,
+      professor,
+      parecer_global: parecerGlobal,
+      objetivos,
+      campo_bncc: `Matriz ${faixaEtaria}`,
+      avaliacao: parecerGlobal || `${objetivos.length} objetivos avaliados`,
       autor: auth.currentUser.email,
-      created_at: serverTimestamp()
-    }));
-    await audit("create", "relatorios_bncc");
+      autor_uid: auth.currentUser.uid,
+      updated_at: serverTimestamp(),
+      updated_by: auth.currentUser.uid
+    });
+
+    if (editingBnccReportId) {
+      await setDoc(
+        doc(db, "relatorios_bncc", editingBnccReportId),
+        payload,
+        { merge: true }
+      );
+      await audit("update", "relatorios_bncc");
+    } else {
+      await addDoc(collection(db, "relatorios_bncc"), {
+        ...payload,
+        created_at: serverTimestamp()
+      });
+      await audit("create", "relatorios_bncc");
+    }
+
+    setBnccEditMode(null);
     showOk("okRel");
+  };
+
+  document.getElementById("btnRelatorioLimpar").onclick = () => {
+    limparFormularioBncc();
+  };
+
+  document.getElementById("btnRelatorioCancelar")?.addEventListener("click", () => {
+    limparFormularioBncc(false);
+  });
+
+  document.getElementById("btnRelatorioPrint").onclick = () => {
+    const modeSelect = document.getElementById("bnccPrintMode");
+    const mode = modeSelect instanceof HTMLSelectElement ? modeSelect.value : "auto";
+    printBnccTableOnly(mode);
   };
 
   document.getElementById("btnPlan").onclick = async () => {
@@ -2994,6 +3842,7 @@ function attachUiHandlers() {
     const allowedDocumentoMimeTypes = new Set(["application/pdf", "image/jpeg", "image/png"]);
     const allowedDocumentoExtensions = [".pdf", ".jpg", ".jpeg", ".png"];
     const aluno = document.getElementById("matAluno").value.trim();
+    const dataNascimento = document.getElementById("matDataNascimento").value.trim();
     const responsavel = document.getElementById("matResp").value.trim();
     const turma = document.getElementById("matTurma").value.trim();
     if (!aluno) {
@@ -3096,6 +3945,7 @@ function attachUiHandlers() {
       fotoPayload = fotoAluno || existingData?.foto_aluno || null;
       await setDoc(doc(db, "matriculas", editingMatriculaId), withSchoolScope({
         aluno,
+        data_nascimento: dataNascimento || null,
         responsavel,
         turma,
         responsavel_uid: responsavelUid || null,
@@ -3113,6 +3963,7 @@ function attachUiHandlers() {
     } else {
       const matriculaRef = await addDoc(collection(db, "matriculas"), withSchoolScope({
         aluno,
+        data_nascimento: dataNascimento || null,
         responsavel,
         turma,
         responsavel_uid: responsavelUid || null,
@@ -3134,6 +3985,7 @@ function attachUiHandlers() {
       doc(db, "alunos", slugify(aluno)),
       withSchoolScope({
         nome: aluno,
+        data_nascimento: dataNascimento || null,
         turma,
         responsavel_nome: responsavel,
         responsavel_uid: responsavelUid || null,
@@ -3151,6 +4003,27 @@ function attachUiHandlers() {
     );
     await audit(isEditing ? "update" : "create", "matriculas");
     await audit("update", "alunos.vinculo_responsavel");
+
+    if (responsavelCpf && !responsavelUid) {
+      try {
+        const respResult = await criarResponsavelDeMatriculaFn({
+          nome: responsavel || responsavelCpf,
+          cpf: responsavelCpf,
+          escolaId: currentSchoolId(),
+          matriculaId
+        });
+        const novoUid = respResult.data?.uid || null;
+        if (novoUid) {
+          const cpfEmail = `${responsavelCpf}@responsavel.escola`;
+          const updatePayload = { responsavel_uid: novoUid, responsavel_email: cpfEmail, updated_at: serverTimestamp(), updated_by: auth.currentUser.uid };
+          await setDoc(doc(db, "matriculas", matriculaId), updatePayload, { merge: true });
+          await setDoc(doc(db, "alunos", slugify(aluno)), { responsavel_uid: novoUid, responsavel_email: cpfEmail, updated_at: serverTimestamp(), updated_by: auth.currentUser.uid }, { merge: true });
+        }
+      } catch (respErr) {
+        console.warn("Nao foi possivel criar usuario do responsavel:", respErr);
+      }
+    }
+
     clearMatriculaForm();
     showOk("okMat");
   };
@@ -3676,8 +4549,42 @@ function attachUiHandlers() {
     showOk("okDirector");
   };
 
+  document.getElementById("btnMigrarResponsaveisUsuarios")?.addEventListener("click", async () => {
+    const statusEl = document.getElementById("statusMigrarResponsaveisUsuarios");
+    const btn = document.getElementById("btnMigrarResponsaveisUsuarios");
+    if (!confirm("Isso criará usuários de login para todos os responsáveis com CPF cadastrados. Continuar?")) return;
+    btn.disabled = true;
+    if (statusEl) statusEl.textContent = "Processando...";
+    try {
+      const result = await migrarResponsaveisUsuariosFn({});
+      const d = result.data || {};
+      if (statusEl) statusEl.textContent = `Concluído: ${d.created || 0} criado(s), ${d.skipped || 0} ignorado(s), ${d.errors?.length || 0} erro(s).`;
+    } catch (err) {
+      if (statusEl) statusEl.textContent = `Erro: ${err.message || err}`;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
   document.getElementById("schoolSearch")?.addEventListener("input", renderSuperadminSchools);
   document.getElementById("directorSearch")?.addEventListener("input", renderSuperadminDirectors);
+
+  document.getElementById("btnMigrarResponsaveis")?.addEventListener("click", async () => {
+    const statusEl = document.getElementById("statusMigrarResponsaveis");
+    const btn = document.getElementById("btnMigrarResponsaveis");
+    if (!confirm("Isso criará usuários de login para todos os responsáveis com CPF cadastrados. Continuar?")) return;
+    btn.disabled = true;
+    if (statusEl) statusEl.textContent = "Processando...";
+    try {
+      const result = await migrarResponsaveisUsuariosFn({});
+      const d = result.data || {};
+      if (statusEl) statusEl.textContent = `Concluído: ${d.created || 0} criado(s), ${d.skipped || 0} ignorado(s), ${d.errors?.length || 0} erro(s).`;
+    } catch (err) {
+      if (statusEl) statusEl.textContent = `Erro: ${err.message || err}`;
+    } finally {
+      btn.disabled = false;
+    }
+  });
   document.getElementById("schoolCityFilter")?.addEventListener("input", updateSuperadminSummary);
   document.getElementById("schoolSortMetric")?.addEventListener("change", updateSuperadminSummary);
 }
@@ -3694,8 +4601,10 @@ function attachLists() {
       setSelectedAgenda(null, null);
       return;
     }
+    const isFamily = currentProfile.role === "responsavel";
     const docs = snap.docs
       .map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }))
+      .filter(({ data }) => !isFamily || (data.status && data.status !== "rascunho"))
       .sort((left, right) => String(right.data.data || "").localeCompare(String(left.data.data || "")));
     const familyAgendaCount = document.getElementById("familyAgendaCount");
     const familyUnreadCount = document.getElementById("familyUnreadCount");
@@ -3751,20 +4660,59 @@ function attachLists() {
   });
   detachListeners.push(offAgendaEvents);
 
+  const MURAL_ROLES_VISIVEIS = new Set(["professor", "direcao", "admin", "superadmin"]);
   attachList("mural_avisos", "listMural", (_, data) =>
-    renderItem(data.titulo || "Aviso", [`Tipo: ${data.tipo || "-"}`, data.texto || "Sem texto"], data.created_at)
+    renderItem(data.titulo || "Aviso", [`Tipo: ${data.tipo || "-"}`, data.texto || "Sem texto"], data.created_at),
+    isFamilyOnlyRole() ? { filter: (data) => MURAL_ROLES_VISIVEIS.has(data.autor_role) } : {}
   );
 
-  attachList("chat_mensagens", "listChat", (_, data) =>
-    renderItem(`${data.de_email || "usuario"} > ${data.para || "canal"}`, [data.mensagem || "Sem mensagem"], data.created_at)
-  );
+  const chatQuery = scopedCollectionQuery("chat_mensagens", [limit(120)]);
+  const offChat = onSnapshot(chatQuery, (snap) => {
+    const list = document.getElementById("listChat");
+    if (!list) return;
+    list.innerHTML = "";
+    if (snap.empty) {
+      list.innerHTML = "<p class=\"small\">Sem mensagens ainda.</p>";
+      updateChatUnreadBadge([]);
+      return;
+    }
+    const rows = snap.docs
+      .map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }))
+      .filter((row) => canCurrentUserReadChatMessage(row.data))
+      .sort((left, right) => {
+        const leftValue = left.data.created_at;
+        const rightValue = right.data.created_at;
+        const leftTs = leftValue && typeof leftValue.toDate === "function" ? leftValue.toDate().getTime() : 0;
+        const rightTs = rightValue && typeof rightValue.toDate === "function" ? rightValue.toDate().getTime() : 0;
+        return rightTs - leftTs;
+      });
 
+    if (!rows.length) {
+      list.innerHTML = "<p class=\"small\">Sem mensagens para o seu perfil.</p>";
+      updateChatUnreadBadge([]);
+      return;
+    }
+    updateChatUnreadBadge(rows);
+    rows.forEach((row) => list.appendChild(renderChatMessageItem(row.id, row.data)));
+  });
+  detachListeners.push(offChat);
+
+  const galeriaFilter = isFamilyOnlyRole() ? (() => {
+    const childIds = new Set(cachedStudents.map(({ id }) => id));
+    const childTurmas = new Set(cachedStudents.map(({ data }) => (data.turma || "").trim().toLowerCase()).filter(Boolean));
+    return (data) => {
+      if (data.aluno_id && childIds.has(data.aluno_id)) return true;
+      if (data.turma && childTurmas.has((data.turma || "").trim().toLowerCase())) return true;
+      return false;
+    };
+  })() : null;
   attachList("galeria_fotos", "listGaleria", (_, data) =>
     renderItem(
       `Galeria - ${data.aluno_turma || "sem turma"}`,
       [`URL: ${data.foto_url || "-"}`, `Legenda: ${data.legenda || "-"}`],
       data.created_at
-    )
+    ),
+    galeriaFilter ? { filter: galeriaFilter } : {}
   );
   attachList("autorizacoes_digitais", "listAutorizacoes", (_, data) =>
     renderItem(
@@ -3774,13 +4722,8 @@ function attachLists() {
     )
   );
 
-  attachList("relatorios_bncc", "listRelatoriosBncc", (_, data) =>
-    renderItem(
-      `Relatorio BNCC - ${data.aluno || "aluno"}`,
-      [`Campo: ${data.campo_bncc || "-"}`, data.avaliacao || "Sem avaliacao"],
-      data.created_at
-    )
-  );
+  if (!isFamilyOnlyRole()) {
+  attachList("relatorios_bncc", "listRelatoriosBncc", (id, data) => renderBnccReportItem(id, data));
   attachList("planejamento_aulas", "listPlanejamento", (_, data) =>
     renderItem(
       `Planejamento - ${data.turma || "turma"}`,
@@ -3865,6 +4808,7 @@ function attachLists() {
     (id, data) => renderItem(`Usuario - ${data.email || id}`, [`Identificador: ${id}`, `Perfil: ${data.role || "-"}`], data.updated_at || data.created_at),
     { orderByField: "updated_at" }
   );
+  } // end !isFamilyOnlyRole()
   const renderFaixasEtarias = () => {
     const list = document.getElementById("listFaixas");
     if (!list) return;
@@ -3916,6 +4860,7 @@ function attachLists() {
   });
   detachListeners.push(offTurmas);
 
+  if (!isFamilyOnlyRole()) {
   attachList("portaria_retiradas", "listPortaria", (_, data) =>
     renderItem(
       `Retirada - ${data.aluno || "aluno"}`,
@@ -3959,6 +4904,7 @@ function attachLists() {
     }
   });
   detachListeners.push(offCaixa);
+  } // end !isFamilyOnlyRole() portaria/lgpd/financeiro
 
   if (isSuperUser()) {
     const offEscolas = onSnapshot(scopedCollectionQuery("escolas", [limit(100)]), (snap) => {
@@ -3969,17 +4915,19 @@ function attachLists() {
     detachListeners.push(offEscolas);
   }
 
-  const offDiretores = onSnapshot(scopedCollectionQuery("usuarios", [limit(200)]), (snap) => {
-    cachedUsers = snap.docs
-      .map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }));
-    cachedDirectors = cachedUsers
-      .filter(({ data }) => data.role === "direcao");
-    populateAccUserOptions();
-    populateProfessorOptions();
-    populateProntuarioFiltroOptions();
-    renderSuperadminDirectors();
-  });
-  detachListeners.push(offDiretores);
+  if (!isFamilyOnlyRole()) {
+    const offDiretores = onSnapshot(scopedCollectionQuery("usuarios", [limit(200)]), (snap) => {
+      cachedUsers = snap.docs
+        .map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }));
+      cachedDirectors = cachedUsers
+        .filter(({ data }) => data.role === "direcao");
+      populateAccUserOptions();
+      populateProfessorOptions();
+      populateProntuarioFiltroOptions();
+      renderSuperadminDirectors();
+    });
+    detachListeners.push(offDiretores);
+  }
 
   const offFaixas = onSnapshot(scopedCollectionQuery("faixas_etarias", [limit(100)]), (snap) => {
     cachedFaixasEtarias = snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }));
@@ -3988,20 +4936,29 @@ function attachLists() {
   });
   detachListeners.push(offFaixas);
 
-  const offStudentsSummary = onSnapshot(scopedCollectionQuery("alunos", [limit(500)]), (snap) => {
+  const alunosQuery = isFamilyOnlyRole()
+    ? scopedCollectionQuery("alunos", [where("responsavel_uid", "==", auth.currentUser.uid), limit(20)])
+    : scopedCollectionQuery("alunos", [limit(500)]);
+  const offStudentsSummary = onSnapshot(alunosQuery, (snap) => {
     cachedStudents = snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }));
     populateAgendaAlunoOptions();
+    populateGaleriaAlunoOptions();
+    populateBnccAlunoOptions();
     populateProntuarioAlunoOptions();
     populateLgpdAlunoOptions();
+    populateChatTurmaFilterOptions();
+    populateChatRecipientOptions();
     updateSuperadminSummary();
   });
   detachListeners.push(offStudentsSummary);
 
+  if (!isFamilyOnlyRole()) {
   const offEnrollmentsSummary = onSnapshot(scopedCollectionQuery("matriculas", [limit(500)]), (snap) => {
     cachedEnrollments = snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }));
     updateSuperadminSummary();
   });
   detachListeners.push(offEnrollmentsSummary);
+  } // end !isFamilyOnlyRole()
 }
 
 function attachKpiOnly() {
@@ -4041,8 +4998,17 @@ function attachKpiOnly() {
   detachListeners.push(offCaixa);
 }
 
+function resolveLoginEmail(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.length === 11) {
+    return `${digits}@responsavel.escola`;
+  }
+  return String(value || "").trim();
+}
+
 btnLogin.addEventListener("click", () => {
-  signInWithEmailAndPassword(auth, emailInput.value, passwordInput.value)
+  const loginEmail = resolveLoginEmail(emailInput.value);
+  signInWithEmailAndPassword(auth, loginEmail, passwordInput.value)
     .then(() => {
       loginError.style.display = "none";
     })

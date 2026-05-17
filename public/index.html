@@ -12,7 +12,7 @@
         <div class="login-box">
             <h1>Portal da Escola</h1>
             <p>Acesse para operar todos os modulos.</p>
-            <input class="field" type="email" id="email" placeholder="E-mail" required>
+            <input class="field" type="text" id="email" placeholder="E-mail ou CPF" autocomplete="username" required>
             <input class="field" type="password" id="password" placeholder="Senha" required>
             <button class="btn" id="btnLogin" style="width: 100%;">Entrar</button>
             <p class="status" id="loginError"></p>
@@ -29,7 +29,7 @@
                     <label class="nav-section-label">COMUNICACAO</label>
                     <a href="#" class="nav-item active" data-section="agenda">📅 Agenda Digital</a>
                     <a href="#" class="nav-item" data-section="mural">📢 Mural</a>
-                    <a href="#" class="nav-item" data-section="chat">💬 Chat</a>
+                    <a href="#" class="nav-item" data-section="chat">💬 Chat <span id="chatUnreadBadge" class="nav-badge hidden">0</span></a>
                     <a href="#" class="nav-item" data-section="galeria">📸 Galeria</a>
                     <a href="#" class="nav-item" data-section="autorizacoes">✅ Autorizacoes</a>
                 </div>
@@ -94,14 +94,14 @@
                                 <span class="tag" id="agendaModeTag">Modo escola</span>
                                 <span class="tag tag-warn" id="agendaSelectedStatus">Nenhuma agenda selecionada</span>
                             </div>
-                                <select id="agendaAluno" class="field">
+                                <select id="agendaAluno" class="field school-only">
                                     <option value="">Selecione o aluno</option>
                                 </select>
-                            <div class="row">
+                            <div class="row school-only">
                                 <input id="agendaTurma" class="field" placeholder="Turma">
                                 <input id="agendaData" class="field" type="date">
                             </div>
-                            <div class="row">
+                            <div class="row school-only">
                                 <input id="agendaResponsavelUid" class="field" placeholder="Identificador do responsavel (automatico)" readonly>
                                 <select id="agendaStatus" class="field" disabled>
                                     <option value="rascunho">Rascunho</option>
@@ -163,10 +163,10 @@
                     <section class="card">
                         <div class="card-head" style="background:#e67e22;">Comunicacao - Mural</div>
                         <div class="card-body">
-                            <input id="muralTitulo" class="field" placeholder="Titulo do aviso">
-                            <input id="muralTipo" class="field" placeholder="Tipo">
-                            <textarea id="muralTexto" class="field" rows="3" placeholder="Comunicado"></textarea>
-                            <button class="btn" id="btnMural">Publicar aviso</button>
+                            <input id="muralTitulo" class="field school-only" placeholder="Titulo do aviso">
+                            <input id="muralTipo" class="field school-only" placeholder="Tipo">
+                            <textarea id="muralTexto" class="field school-only" rows="3" placeholder="Comunicado"></textarea>
+                            <button class="btn school-only" id="btnMural">Publicar aviso</button>
                             <p class="ok" id="okMural">Aviso publicado.</p>
                             <div id="listMural" class="list"></div>
                         </div>
@@ -175,7 +175,12 @@
                     <section class="card">
                         <div class="card-head" style="background:#d68910;">Comunicacao - Chat</div>
                         <div class="card-body">
-                            <input id="chatPara" class="field" placeholder="Para">
+                            <select id="chatTurmaFiltro" class="field">
+                                <option value="">Todas as turmas</option>
+                            </select>
+                            <select id="chatPara" class="field">
+                                <option value="">Selecione o destinatario</option>
+                            </select>
                             <textarea id="chatMsg" class="field" rows="3" placeholder="Mensagem"></textarea>
                             <button class="btn" id="btnChat">Enviar mensagem</button>
                             <p class="ok" id="okChat">Mensagem enviada.</p>
@@ -186,10 +191,10 @@
                     <section class="card">
                         <div class="card-head" style="background:#c97a0e;">Comunicacao - Galeria</div>
                         <div class="card-body">
-                            <input id="galeriaAluno" class="field" placeholder="Aluno/Turma">
-                            <input id="galeriaUrl" class="field" placeholder="URL da foto">
-                            <input id="galeriaLegenda" class="field" placeholder="Legenda">
-                            <button class="btn" id="btnGaleria">Publicar foto</button>
+                            <select id="galeriaAluno" class="field school-only"><option value="">Selecione o aluno</option></select>
+                            <input id="galeriaUrl" class="field school-only" placeholder="URL da foto">
+                            <input id="galeriaLegenda" class="field school-only" placeholder="Legenda">
+                            <button class="btn school-only" id="btnGaleria">Publicar foto</button>
                             <p class="ok" id="okGaleria">Foto registrada.</p>
                             <div id="listGaleria" class="list"></div>
                         </div>
@@ -212,10 +217,48 @@
                     <section class="card">
                         <div class="card-head" style="background:#2e86de;">Pedagogico - BNCC</div>
                         <div class="card-body">
-                            <input id="relAluno" class="field" placeholder="Aluno">
-                            <input id="relCampo" class="field" placeholder="Campo BNCC">
-                            <textarea id="relAvaliacao" class="field" rows="3" placeholder="Avaliacao"></textarea>
-                            <button class="btn" id="btnRelatorio">Salvar relatorio</button>
+                            <div class="row">
+                                <select id="relAluno" class="field">
+                                    <option value="">Selecione o aluno</option>
+                                </select>
+                                <select id="relFaixa" class="field">
+                                    <option value="EI01">EI01 - Bebes (0 a 1 ano e 6 meses)</option>
+                                    <option value="EI02">EI02 - Criancas bem pequenas (1 ano e 7 meses a 3 anos e 11 meses)</option>
+                                    <option value="EI03" selected>EI03 - Criancas pequenas (4 anos a 5 anos e 11 meses)</option>
+                                </select>
+                            </div>
+                            <div class="row">
+                                <input id="relIdade" class="field" placeholder="Data de nascimento / Idade">
+                                <input id="relPeriodo" class="field" placeholder="Turma / Periodo letivo">
+                            </div>
+                            <input id="relProfessor" class="field" placeholder="Professor(a) regente">
+
+                            <div class="bncc-table-wrap">
+                                <table class="bncc-table" aria-label="Matriz BNCC">
+                                    <thead>
+                                        <tr>
+                                            <th>Campo de experiencia / Objetivo</th>
+                                            <th>Avaliacao</th>
+                                            <th>Evidencias observadas</th>
+                                            <th>Planejamento de intervencao</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="bnccTabelaCorpo"></tbody>
+                                </table>
+                            </div>
+
+                            <textarea id="relParecerGlobal" class="field" rows="4" placeholder="Parecer descritivo global"></textarea>
+                            <div class="bncc-actions">
+                                <button class="btn" id="btnRelatorio">Salvar relatorio</button>
+                                <button class="btn btn-secondary hidden" id="btnRelatorioCancelar">Cancelar edicao</button>
+                                <button class="btn" id="btnRelatorioLimpar">Limpar dados</button>
+                                <select id="bnccPrintMode" class="field" style="max-width: 240px;">
+                                    <option value="auto" selected>Impressao: Automatico</option>
+                                    <option value="compact">Impressao: Compacto</option>
+                                    <option value="read">Impressao: Leitura</option>
+                                </select>
+                                <button class="btn" id="btnRelatorioPrint">Imprimir ficha</button>
+                            </div>
                             <p class="ok" id="okRel">Relatorio salvo.</p>
                             <div id="listRelatoriosBncc" class="list"></div>
                         </div>
@@ -345,6 +388,8 @@
                         <div class="card-head" style="background:#8e44ad;">Administrativo - Matriculas</div>
                         <div class="card-body">
                             <input id="matAluno" class="field" placeholder="Aluno">
+                            <label>Data de nascimento do aluno</label>
+                            <input id="matDataNascimento" type="date" class="field">
                             <div class="row"><input id="matResp" class="field" placeholder="Responsavel"><select id="matTurma" class="field"><option value="">Turma do aluno</option></select></div>
                             <div class="row"><input id="matRespUid" class="field" placeholder="Identificador do responsavel (automatico)" readonly><input id="matRespEmail" class="field" placeholder="Email do responsavel"></div>
                             <input id="matRespCpf" class="field" placeholder="CPF do responsavel (ex: 000.000.000-00)">
@@ -449,6 +494,10 @@
                             </select>
                             <button class="btn" id="btnAcesso">Atualizar permissao</button>
                             <p class="ok" id="okAcesso">Permissao atualizada.</p>
+                            <hr style="margin:16px 0;border:none;border-top:1px solid var(--border,#ddd)">
+                            <p style="font-size:0.85em;color:var(--text-muted,#888);">Cria automaticamente os logins dos responsáveis cadastrados nas matrículas que ainda não possuem acesso.</p>
+                            <button class="btn" id="btnMigrarResponsaveisUsuarios">Criar usuários de responsáveis</button>
+                            <p class="status" id="statusMigrarResponsaveisUsuarios"></p>
                             <div id="listUsuarios" class="list"></div>
                         </div>
                     </section>
@@ -628,6 +677,13 @@
                                     <div id="listDiretores" class="list"></div>
                                 </div>
                             </div>
+
+                            <div class="superadmin-block" style="margin-top:24px;">
+                                <h4>Manutenção: Responsáveis</h4>
+                                <p style="font-size:0.85em;color:var(--text-muted,#888);">Cria automaticamente os usuários de login para todos os responsáveis cadastrados nas matrículas que ainda não possuem acesso ao sistema.</p>
+                                <button class="btn" id="btnMigrarResponsaveis">Criar usuários de responsáveis</button>
+                                <p class="status" id="statusMigrarResponsaveis"></p>
+                            </div>
                         </div>
                     </section>
                 </div>
@@ -729,16 +785,24 @@
             superadmin: 21
         };
 
+        const FAMILY_SECTIONS = new Set(['agenda','mural','chat','galeria','autorizacoes']);
+
+        function isFamilyRole() {
+            if (typeof window._currentProfileRole === 'string') return window._currentProfileRole === 'responsavel';
+            return false;
+        }
+
         function showSection(section) {
+            const allowedSection = (isFamilyRole() && !FAMILY_SECTIONS.has(section)) ? 'agenda' : section;
             const cards = Array.from(document.querySelectorAll('#mainGrid > .card'));
-            const cardIndex = cardIndexMap[section];
+            const cardIndex = cardIndexMap[allowedSection];
             cards.forEach((card, index) => {
                 card.style.display = index === cardIndex ? 'block' : 'none';
             });
 
             const sectionTitle = document.getElementById('sectionTitle');
             if (sectionTitle) {
-                sectionTitle.textContent = sectionTitles[section] || 'Modulos';
+                sectionTitle.textContent = sectionTitles[allowedSection] || 'Modulos';
             }
 
             const container = document.querySelector('.container');
@@ -757,9 +821,11 @@
         document.querySelectorAll('.nav-item').forEach((item) => {
             item.addEventListener('click', (e) => {
                 e.preventDefault();
+                const section = item.getAttribute('data-section');
+                if (isFamilyRole() && !FAMILY_SECTIONS.has(section)) return;
                 document.querySelectorAll('.nav-item').forEach((i) => i.classList.remove('active'));
                 item.classList.add('active');
-                showSection(item.getAttribute('data-section'));
+                showSection(section);
             });
         });
 

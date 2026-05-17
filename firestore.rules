@@ -113,25 +113,27 @@ service cloud.firestore {
     }
 
     match /mural_avisos/{docId} {
-      allow read: if sameSchool(resource.data) && isStaff();
+      allow read: if sameSchool(resource.data) && (isStaff() || isFamily());
       allow create: if sameSchool(request.resource.data) && isOfficeOps();
       allow update, delete: if sameSchool(resource.data) && isAdmin();
     }
 
     match /chat_mensagens/{docId} {
-      allow read: if sameSchool(resource.data) && isStaff();
-      allow create: if sameSchool(request.resource.data) && isStaff();
-      allow update, delete: if false;
+      allow read: if sameSchool(resource.data) && (isStaff() || isFamily());
+      allow create: if sameSchool(request.resource.data) && (isStaff() || isFamily());
+      allow update: if sameSchool(request.resource.data) && (isStaff() || isFamily()) &&
+        request.resource.data.diff(resource.data).changedKeys().hasOnly(['read_by', 'updated_at']);
+      allow delete: if false;
     }
 
     match /galeria_fotos/{docId} {
-      allow read: if sameSchool(resource.data) && isStaff();
+      allow read: if sameSchool(resource.data) && (isStaff() || isFamily());
       allow create: if sameSchool(request.resource.data) && isTeacherOps();
       allow update, delete: if sameSchool(resource.data) && isAdmin();
     }
 
     match /autorizacoes_digitais/{docId} {
-      allow read: if sameSchool(resource.data) && isStaff();
+      allow read: if sameSchool(resource.data) && (isStaff() || isFamily());
       allow create: if sameSchool(request.resource.data) && isOfficeOps();
       allow update: if sameSchool(request.resource.data) && isOfficeOps();
       allow delete: if sameSchool(resource.data) && isAdmin();
@@ -140,7 +142,7 @@ service cloud.firestore {
     match /relatorios_bncc/{docId} {
       allow read: if sameSchool(resource.data) && isTeacherOps();
       allow create: if sameSchool(request.resource.data) && isTeacherOps();
-      allow update, delete: if sameSchool(resource.data) && isAdmin();
+      allow update, delete: if sameSchool(resource.data) && isTeacherOps();
     }
 
     match /planejamento_aulas/{docId} {
@@ -216,13 +218,13 @@ service cloud.firestore {
     }
 
     match /faixas_etarias/{docId} {
-      allow read: if sameSchool(resource.data) && isStaff();
+      allow read: if sameSchool(resource.data) && (isStaff() || isFamily());
       allow create, update: if sameSchool(request.resource.data) && isOfficeOps();
       allow delete: if sameSchool(resource.data) && isAdmin();
     }
 
     match /turmas/{docId} {
-      allow read: if sameSchool(resource.data) && isStaff();
+      allow read: if sameSchool(resource.data) && (isStaff() || isFamily());
       allow create, update: if sameSchool(request.resource.data) && isOfficeOps();
       allow delete: if sameSchool(resource.data) && isAdmin();
     }

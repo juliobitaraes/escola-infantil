@@ -229,6 +229,22 @@ body {
     cursor: pointer;
 }
 
+.nav-badge {
+    margin-left: auto;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 6px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--white);
+    background: var(--warning);
+}
+
 .nav-item:hover {
     color: var(--text-strong);
     background: rgba(37, 88, 79, 0.22);
@@ -445,7 +461,8 @@ textarea:focus-visible,
 }
 
 .line .doc-download-btn,
-.line .doc-download-all-btn {
+.line .doc-download-all-btn,
+.line .chat-read-btn {
     border: 1px solid var(--border-dark);
     border-radius: 6px;
     padding: 4px 10px;
@@ -457,12 +474,18 @@ textarea:focus-visible,
 }
 
 .line .doc-download-btn:hover,
-.line .doc-download-all-btn:hover {
+.line .doc-download-all-btn:hover,
+.line .chat-read-btn:hover {
     background: color-mix(in srgb, var(--bg-dark) 75%, var(--primary) 25%);
 }
 
 .line .doc-download-all-btn {
     border-color: color-mix(in srgb, var(--success) 70%, var(--border-dark) 30%);
+}
+
+.chat-item.chat-unread {
+    border-color: color-mix(in srgb, var(--warning) 55%, var(--border-dark) 45%);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--warning) 25%, transparent 75%);
 }
 
 .prontuario-doc-section {
@@ -835,6 +858,79 @@ select.field {
     border-radius: 8px;
 }
 
+.bncc-table-wrap {
+    overflow-x: auto;
+    margin: 12px 0;
+    border: 1px solid var(--border-dark);
+    border-radius: 8px;
+}
+
+.bncc-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+#listRelatoriosBncc {
+    margin-top: 18px;
+}
+
+.bncc-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 860px;
+}
+
+.bncc-table th,
+.bncc-table td {
+    border-bottom: 1px solid var(--border-dark);
+    padding: 10px;
+    vertical-align: top;
+}
+
+.bncc-table th {
+    background: var(--bg-card);
+    color: var(--heading);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.bncc-table .bncc-group-row td {
+    background: color-mix(in srgb, var(--primary) 16%, transparent);
+    color: var(--heading);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    border-top: 1px solid var(--border-dark);
+}
+
+.bncc-table .bncc-objective-row td {
+    background: var(--bg-dark);
+}
+
+.bncc-campo {
+    font-weight: 700;
+    color: var(--heading);
+    margin-bottom: 6px;
+}
+
+.bncc-codigo {
+    display: inline-block;
+    background: color-mix(in srgb, var(--primary) 35%, transparent);
+    color: var(--text);
+    border: 1px solid var(--border-dark);
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 11px;
+    margin-bottom: 6px;
+}
+
+.bncc-desc {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
 /* RESPONSIVE */
 @media (max-width: 768px) {
     .sidebar {
@@ -1174,6 +1270,23 @@ select.field {
     padding: 5px 10px;
     font-size: 12px;
     cursor: pointer;
+}
+
+.bncc-edit-btn,
+.bncc-delete-btn {
+    border: 1px solid var(--border-dark);
+    background: transparent;
+    color: var(--text);
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.bncc-edit-btn:hover,
+.bncc-delete-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary-light);
 }
 
 .lgpd-edit-btn:hover {

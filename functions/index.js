@@ -531,6 +531,146 @@ exports.criarUsuarioEscola = onCall({ region: "southamerica-east1" }, async (req
   };
 });
 
+const RESPONSAVEL_EMAIL_DOMAIN = "responsavel.escola";
+const RESPONSAVEL_SENHA_PADRAO = "123456";
+
+function cpfToEmail(cpf) {
+  return `${String(cpf || "").replace(/\D/g, "")}@${RESPONSAVEL_EMAIL_DOMAIN}`;
+}
+
+async function criarOuAtualizarUsuarioResponsavel({ nome, cpf, escolaId, matriculaId, executorUid }) {
+  const cpfDigits = String(cpf || "").replace(/\D/g, "");
+  if (cpfDigits.length !== 11) {
+    throw new HttpsError("invalid-argument", "CPF invalido para criar usuario responsavel.");
+  }
+  if (!escolaId) {
+    throw new HttpsError("invalid-argument", "escolaId e obrigatorio.");
+  }
+
+  const userEmail = cpfToEmail(cpfDigits);
+  let targetUid = null;
+  let created = false;
+
+  try {
+    const existing = await admin.auth().getUserByEmail(userEmail);
+    targetUid = existing.uid;
+  } catch (error) {
+    if (error && error.code === "auth/user-not-found") {
+      const createdUser = await admin.auth().createUser({
+        displayName: nome || cpfDigits,
+        email: userEmail,
+        password: RESPONSAVEL_SENHA_PADRAO,
+        emailVerified: false,
+        disabled: false
+      });
+      targetUid = createdUser.uid;
+      created = true;
+    } else {
+      throw error;
+    }
+  }
+
+  await db.collection("usuarios").doc(targetUid).set(
+    {
+      uid: targetUid,
+      nome: nome || cpfDigits,
+      email: userEmail,
+      cpf: cpfDigits,
+      role: "responsavel",
+      escola_id: escolaId,
+      status: "ativo",
+      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_by: executorUid || null,
+      created_at: admin.firestore.FieldValue.serverTimestamp()
+    },
+    { merge: true }
+  );
+
+  if (matriculaId) {
+    await db.collection("matriculas").doc(matriculaId).set(
+      { responsavel_uid: targetUid, updated_at: admin.firestore.FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+  }
+
+  return { uid: targetUid, email: userEmail, created };
+}
+
+exports.criarResponsavelDeMatricula = onCall({ region: "southamerica-east1" }, async (request) => {
+  requireAuth(request);
+  const context = await getUserContext(request.auth.uid, request.auth.token && request.auth.token.email);
+  requireUserManagementRole(context);
+
+  const { nome, cpf, escolaId, matriculaId } = request.data || {};
+
+  const targetSchoolId = context.superuser
+    ? (escolaId || context.escolaId || null)
+    : context.escolaId;
+
+  const result = await criarOuAtualizarUsuarioResponsavel({
+    nome,
+    cpf,
+    escolaId: targetSchoolId,
+    matriculaId: matriculaId || null,
+    executorUid: request.auth.uid
+  });
+
+  await writeAudit({
+    action: result.created ? "create" : "update",
+    area: "usuarios.responsavel",
+    uid: request.auth.uid,
+    email: request.auth.token && request.auth.token.email,
+    escolaId: targetSchoolId,
+    details: { userUid: result.uid, cpf: String(cpf || "").replace(/\D/g, ""), created: result.created }
+  });
+
+  return { ok: true, uid: result.uid, created: result.created };
+});
+
+exports.migrarResponsaveisUsuarios = onCall({ region: "southamerica-east1" }, async (request) => {
+  requireAuth(request);
+  const context = await getUserContext(request.auth.uid, request.auth.token && request.auth.token.email);
+  requireUserManagementRole(context);
+
+  const snap = await db.collection("matriculas").get();
+  const results = { created: 0, skipped: 0, errors: [] };
+
+  for (const docSnap of snap.docs) {
+    const data = docSnap.data();
+    const cpf = String(data.responsavel_cpf || "").replace(/\D/g, "");
+    const escolaId = data.escola_id || null;
+    if (!cpf || cpf.length !== 11 || !escolaId) {
+      results.skipped += 1;
+      continue;
+    }
+
+    try {
+      const result = await criarOuAtualizarUsuarioResponsavel({
+        nome: data.responsavel || cpf,
+        cpf,
+        escolaId,
+        matriculaId: docSnap.id,
+        executorUid: request.auth.uid
+      });
+      if (result.created) results.created += 1;
+      else results.skipped += 1;
+    } catch (err) {
+      results.errors.push({ matriculaId: docSnap.id, cpf, error: String(err.message || err) });
+    }
+  }
+
+  await writeAudit({
+    action: "migrate",
+    area: "usuarios.responsavel",
+    uid: request.auth.uid,
+    email: request.auth.token && request.auth.token.email,
+    escolaId: null,
+    details: results
+  });
+
+  return { ok: true, ...results };
+});
+
 exports.resetDiretorSenha = onCall({ region: "southamerica-east1" }, async (request) => {
   requireAuth(request);
   const context = await getUserContext(request.auth.uid, request.auth.token && request.auth.token.email);
