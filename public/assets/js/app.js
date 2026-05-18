@@ -79,6 +79,9 @@ let prontuarioPreviewRequestId = 0;
 let editingMatriculaId = null;
 let editingLgpdConsentId = null;
 let editingBnccReportId = null;
+let editingAnamneseId = null;
+let selectedAnamneseId = null;
+let cachedAnamneseRecords = [];
 
 const LGPD_NOTICE_MESSAGE = [
   "Comunicado Importante: Proteção de Imagem dos Nossos Alunos",
@@ -168,6 +171,601 @@ function setAgendaStatusField(value) {
   if (!agendaStatus) return;
   agendaStatus.value = normalizeAgendaStatus(value);
   agendaStatus.disabled = true;
+}
+
+function initAnamneseStepper() {
+  const wizard = document.getElementById("anamneseWizard");
+  if (!wizard) return;
+
+  const steps = Array.from(wizard.querySelectorAll(".anamnese-form-step"));
+  const tabs = Array.from(wizard.querySelectorAll(".anamnese-step-tab"));
+  const btnPrev = document.getElementById("btnAnaPrev");
+  const btnSubmit = document.getElementById("btnAnamnese");
+
+  if (!steps.length || !tabs.length || !btnPrev || !btnSubmit) return;
+
+  let currentStep = 0;
+
+  const updateButtons = () => {
+    btnPrev.style.display = currentStep === 0 ? "none" : "inline-block";
+    btnSubmit.style.display = "inline-block";
+  };
+
+  const showStep = (stepIndex) => {
+    if (stepIndex < 0 || stepIndex >= steps.length) return;
+
+    steps[currentStep].classList.remove("active");
+    tabs[currentStep].classList.remove("active");
+
+    currentStep = stepIndex;
+
+    steps[currentStep].classList.add("active");
+    tabs[currentStep].classList.add("active");
+    updateButtons();
+  };
+
+  tabs.forEach((tab, index) => {
+    tab.onclick = () => {
+      const value = Number(tab.dataset.step);
+      showStep(Number.isNaN(value) ? index : value);
+    };
+  });
+
+  btnPrev.onclick = () => showStep(currentStep - 1);
+  showStep(0);
+}
+
+function getAnamneseFieldIds() {
+  return [
+    "nome_aluno",
+    "data_nascimento",
+    "genero",
+    "nome_mae",
+    "tel_mae",
+    "nome_pai",
+    "tel_pai",
+    "gestacao_planejada",
+    "tipo_parto",
+    "intercorrencias_gravidez",
+    "tempo_gestacao",
+    "peso_nascimento",
+    "problemas_nascimento",
+    "idade_sustentou_cabeca",
+    "idade_andou",
+    "equilibrio",
+    "lateralidade",
+    "desenvolvimento_fala",
+    "vacinas",
+    "desfralde",
+    "diagnostico_medico",
+    "especialistas",
+    "alergias_graves",
+    "restricoes_alimentares",
+    "pais_juntos",
+    "irmaos",
+    "sono_qualidade",
+    "tempo_telas",
+    "comportamento_frustracao",
+    "obs_finais"
+  ];
+}
+
+function readAnamneseField(id) {
+  const element = document.getElementById(id);
+  return element ? String(element.value || "").trim() : "";
+}
+
+function setAnamneseField(id, value) {
+  const element = document.getElementById(id);
+  if (!element) return;
+  element.value = value == null ? "" : String(value);
+}
+
+function setAnamneseEditMode(anamneseId) {
+  editingAnamneseId = anamneseId || null;
+  const saveButton = document.getElementById("btnAnamnese");
+  const cancelButton = document.getElementById("btnAnamneseCancelar");
+  if (saveButton) {
+    saveButton.textContent = editingAnamneseId ? "Atualizar Anamnese" : "Salvar Anamnese Completa";
+  }
+  if (cancelButton) {
+    cancelButton.classList.toggle("hidden", !editingAnamneseId);
+  }
+}
+
+function setAnamneseReadOnlyMode(enabled) {
+  const wizard = document.getElementById("anamneseWizard");
+  if (!wizard) return;
+  wizard.querySelectorAll("input, select, textarea").forEach((element) => {
+    if (!(element instanceof HTMLElement)) return;
+    if (element.id === "btnAnamnesePrint") return;
+    if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+      element.readOnly = enabled;
+      element.disabled = enabled;
+    }
+    if (element instanceof HTMLSelectElement) {
+      element.disabled = enabled;
+    }
+  });
+}
+
+function applyAnamneseAccessLayout() {
+  const familyOnly = isFamilyOnlyRole();
+  const saveButton = document.getElementById("btnAnamnese");
+  const cancelButton = document.getElementById("btnAnamneseCancelar");
+  const filters = document.getElementById("anamneseStaffFilters");
+
+  if (saveButton) saveButton.style.display = familyOnly ? "inline-block" : "none";
+  if (cancelButton) cancelButton.classList.add("hidden");
+  if (filters) filters.classList.toggle("hidden", familyOnly);
+
+  if (!familyOnly) {
+    setAnamneseEditMode(null);
+  }
+  setAnamneseReadOnlyMode(!familyOnly);
+}
+
+function clearAnamneseForm() {
+  const form = document.getElementById("anamneseForm");
+  if (form instanceof HTMLFormElement) {
+    form.reset();
+  }
+  selectedAnamneseId = null;
+  setAnamneseEditMode(null);
+}
+
+function resolveAnamneseStudentByName(nomeAluno) {
+  const normalized = String(nomeAluno || "").trim().toLowerCase();
+  if (!normalized) return null;
+  return cachedStudents.find(({ data }) => String(data?.nome || "").trim().toLowerCase() === normalized) || null;
+}
+
+function buildAnamnesePayload() {
+  const nomeAluno = readAnamneseField("nome_aluno");
+  const alunoEntry = resolveAnamneseStudentByName(nomeAluno);
+  const diagnostico = readAnamneseField("diagnostico_medico");
+  const especialistas = readAnamneseField("especialistas");
+  const problemasNascimento = readAnamneseField("problemas_nascimento");
+  return {
+    aluno: nomeAluno,
+    aluno_id: alunoEntry?.id || "",
+    turma: String(alunoEntry?.data?.turma || "").trim(),
+    responsavel_uid: isFamilyOnlyRole() ? auth.currentUser?.uid || "" : readAnamneseField("responsavel_uid"),
+    alergias: readAnamneseField("alergias_graves"),
+    restricoes: readAnamneseField("restricoes_alimentares"),
+    historico_saude: [diagnostico, especialistas, problemasNascimento].filter(Boolean).join(" | "),
+    nome_aluno: nomeAluno,
+    data_nascimento: readAnamneseField("data_nascimento"),
+    genero: readAnamneseField("genero"),
+    nome_mae: readAnamneseField("nome_mae"),
+    tel_mae: readAnamneseField("tel_mae"),
+    nome_pai: readAnamneseField("nome_pai"),
+    tel_pai: readAnamneseField("tel_pai"),
+    gestacao_planejada: readAnamneseField("gestacao_planejada"),
+    tipo_parto: readAnamneseField("tipo_parto"),
+    intercorrencias_gravidez: readAnamneseField("intercorrencias_gravidez"),
+    tempo_gestacao: readAnamneseField("tempo_gestacao"),
+    peso_nascimento: readAnamneseField("peso_nascimento"),
+    problemas_nascimento: problemasNascimento,
+    idade_sustentou_cabeca: readAnamneseField("idade_sustentou_cabeca"),
+    idade_andou: readAnamneseField("idade_andou"),
+    equilibrio: readAnamneseField("equilibrio"),
+    lateralidade: readAnamneseField("lateralidade"),
+    desenvolvimento_fala: readAnamneseField("desenvolvimento_fala"),
+    vacinas: readAnamneseField("vacinas"),
+    desfralde: readAnamneseField("desfralde"),
+    diagnostico_medico: diagnostico,
+    especialistas,
+    alergias_graves: readAnamneseField("alergias_graves"),
+    restricoes_alimentares: readAnamneseField("restricoes_alimentares"),
+    pais_juntos: readAnamneseField("pais_juntos"),
+    irmaos: readAnamneseField("irmaos"),
+    sono_qualidade: readAnamneseField("sono_qualidade"),
+    tempo_telas: readAnamneseField("tempo_telas"),
+    comportamento_frustracao: readAnamneseField("comportamento_frustracao"),
+    obs_finais: readAnamneseField("obs_finais")
+  };
+}
+
+function anamnesePrintStyles() {
+  return `
+    @page {
+      size: A4 portrait;
+      margin: 12mm;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: #1f2937;
+      background: #ffffff;
+      line-height: 1.45;
+    }
+    .print-wrap {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .print-head {
+      border-bottom: 2px solid #0f766e;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+    }
+    .print-head h1 {
+      margin: 0;
+      color: #0f766e;
+      font-size: 21px;
+    }
+    .print-head p {
+      margin: 4px 0 0;
+      color: #374151;
+      font-size: 12px;
+    }
+    .print-step {
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      padding: 12px;
+      margin: 0 0 12px;
+      page-break-inside: avoid;
+    }
+    .print-step h2 {
+      margin: 0 0 10px;
+      color: #0f766e;
+      font-size: 15px;
+      border-bottom: 1px solid #e5e7eb;
+      padding-bottom: 6px;
+    }
+    .print-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 12px;
+    }
+    .print-field {
+      margin-bottom: 6px;
+    }
+    .print-field.full {
+      grid-column: 1 / -1;
+    }
+    .print-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      color: #374151;
+      margin-bottom: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .print-value {
+      min-height: 20px;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .print-signatures {
+      margin-top: 22px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      page-break-inside: avoid;
+    }
+    .print-signature {
+      text-align: center;
+      padding-top: 24px;
+    }
+    .print-signature-line {
+      border-top: 1px solid #111827;
+      margin-bottom: 6px;
+      height: 1px;
+    }
+    .print-signature-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: #374151;
+    }
+    .print-footer-note {
+      margin-top: 18px;
+      font-size: 10px;
+      color: #6b7280;
+      text-align: center;
+    }
+  `;
+}
+
+function buildAnamnesePrintSection(title, fields) {
+  const fieldsHtml = fields
+    .map((field) => {
+      const rawValue = readAnamneseField(field.id);
+      const safeValue = escapeHtml(rawValue || "-");
+      const fullClass = field.full ? " full" : "";
+      return `
+        <div class="print-field${fullClass}">
+          <span class="print-label">${escapeHtml(field.label)}</span>
+          <div class="print-value">${safeValue}</div>
+        </div>
+      `;
+    })
+    .join("");
+
+  return `<section class="print-step"><h2>${escapeHtml(title)}</h2><div class="print-grid">${fieldsHtml}</div></section>`;
+}
+
+function printAnamneseForm() {
+  const printWindow = window.open("", "_blank", "width=1100,height=850");
+  if (!printWindow) {
+    alert("O navegador bloqueou a janela de impressao. Permita pop-ups e tente novamente.");
+    return;
+  }
+
+  const generatedAt = new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short"
+  }).format(new Date());
+
+  const sectionsHtml = [
+    buildAnamnesePrintSection("1. Identificacao", [
+      { id: "nome_aluno", label: "Nome completo da crianca", full: true },
+      { id: "data_nascimento", label: "Data de nascimento" },
+      { id: "genero", label: "Genero" },
+      { id: "nome_mae", label: "Nome da mae/responsavel 1" },
+      { id: "tel_mae", label: "Telefone da mae" },
+      { id: "nome_pai", label: "Nome do pai/responsavel 2" },
+      { id: "tel_pai", label: "Telefone do pai" }
+    ]),
+    buildAnamnesePrintSection("2. Gestacao e Nascimento", [
+      { id: "gestacao_planejada", label: "Gestacao planejada" },
+      { id: "tipo_parto", label: "Tipo de parto" },
+      { id: "intercorrencias_gravidez", label: "Intercorrencias na gravidez", full: true },
+      { id: "tempo_gestacao", label: "Tempo de gestacao (semanas)" },
+      { id: "peso_nascimento", label: "Peso ao nascer (gramas)" },
+      { id: "problemas_nascimento", label: "Complicacoes ao nascer", full: true }
+    ]),
+    buildAnamnesePrintSection("3. Desenvolvimento", [
+      { id: "idade_sustentou_cabeca", label: "Idade que sustentou a cabeca" },
+      { id: "idade_andou", label: "Idade que comecou a andar" },
+      { id: "equilibrio", label: "Equilibrio" },
+      { id: "lateralidade", label: "Lateralidade" },
+      { id: "desenvolvimento_fala", label: "Desenvolvimento da fala", full: true }
+    ]),
+    buildAnamnesePrintSection("4. Saude", [
+      { id: "vacinas", label: "Carteira de vacinacao em dia" },
+      { id: "desfralde", label: "Desfralde" },
+      { id: "diagnostico_medico", label: "Diagnostico clinico/deficiencia", full: true },
+      { id: "especialistas", label: "Acompanhamento com especialistas", full: true },
+      { id: "alergias_graves", label: "Alergias graves" },
+      { id: "restricoes_alimentares", label: "Restricoes/intolerancias alimentares" }
+    ]),
+    buildAnamnesePrintSection("5. Rotina e Familia", [
+      { id: "pais_juntos", label: "Pais residem juntos" },
+      { id: "irmaos", label: "Irmaos" },
+      { id: "sono_qualidade", label: "Qualidade do sono" },
+      { id: "tempo_telas", label: "Tempo de telas" },
+      { id: "comportamento_frustracao", label: "Reacao a frustracao", full: true },
+      { id: "obs_finais", label: "Observacoes finais", full: true }
+    ])
+  ].join("");
+
+  const html = `
+    <!doctype html>
+    <html lang="pt-BR">
+      <head>
+        <meta charset="utf-8">
+        <title>Anamnese - Impressao</title>
+        <style>${anamnesePrintStyles()}</style>
+      </head>
+      <body>
+        <div class="print-wrap">
+          <header class="print-head">
+            <h1>Ficha de Anamnese Completa</h1>
+            <p>Educacao Infantil • Registro Pedagogico e de Saude • Gerado em ${escapeHtml(generatedAt)}</p>
+          </header>
+          ${sectionsHtml}
+          <section class="print-signatures" aria-label="Assinaturas">
+            <div class="print-signature">
+              <div class="print-signature-line"></div>
+              <div class="print-signature-label">Assinatura do Responsavel</div>
+            </div>
+            <div class="print-signature">
+              <div class="print-signature-line"></div>
+              <div class="print-signature-label">Assinatura da Escola / Professor(a)</div>
+            </div>
+          </section>
+          <div class="print-footer-note">Documento para conferencia e assinatura fisica.</div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+
+  const triggerPrint = () => {
+    printWindow.print();
+    printWindow.close();
+  };
+
+  if (printWindow.document.readyState === "complete") {
+    setTimeout(triggerPrint, 120);
+  } else {
+    printWindow.onload = () => setTimeout(triggerPrint, 120);
+  }
+}
+
+function loadAnamneseForEdit(anamneseId, data) {
+  if (!anamneseId || !data) return;
+  selectedAnamneseId = anamneseId;
+  getAnamneseFieldIds().forEach((fieldId) => {
+    if (fieldId === "nome_aluno") {
+      setAnamneseField(fieldId, data[fieldId] || data.aluno || "");
+      return;
+    }
+    if (fieldId === "alergias_graves") {
+      setAnamneseField(fieldId, data[fieldId] || data.alergias || "");
+      return;
+    }
+    if (fieldId === "restricoes_alimentares") {
+      setAnamneseField(fieldId, data[fieldId] || data.restricoes || "");
+      return;
+    }
+    setAnamneseField(fieldId, data[fieldId] || "");
+  });
+  if (isFamilyOnlyRole()) {
+    setAnamneseEditMode(anamneseId);
+  } else {
+    setAnamneseEditMode(null);
+  }
+}
+
+async function deleteAnamnese(anamneseId) {
+  if (!anamneseId) return;
+  if (!confirm("Excluir esta anamnese?")) return;
+  await deleteDoc(doc(db, "fichas_anamnese", anamneseId));
+  await audit("delete", "fichas_anamnese");
+  if (editingAnamneseId === anamneseId || selectedAnamneseId === anamneseId) {
+    clearAnamneseForm();
+    applyAnamneseAccessLayout();
+  }
+}
+
+function renderAnamneseItem(id, data) {
+  const familyOnly = isFamilyOnlyRole();
+  const actions = familyOnly
+    ? '<span class="lgpd-actions"><button type="button" class="anamnese-edit-btn">Editar</button><button type="button" class="anamnese-delete-btn">Excluir</button><button type="button" class="anamnese-print-btn">Imprimir</button></span>'
+    : '<span class="lgpd-actions"><button type="button" class="anamnese-view-btn">Abrir ficha</button><button type="button" class="anamnese-delete-btn">Excluir</button><button type="button" class="anamnese-print-btn">Imprimir</button></span>';
+  const div = renderItem(
+    `Anamnese - ${data.nome_aluno || data.aluno || "aluno"}`,
+    [
+      actions,
+      `Turma: ${data.turma || "Sem turma"}`,
+      `Alergias: ${data.alergias_graves || data.alergias || "-"}`,
+      `Restricoes: ${data.restricoes_alimentares || data.restricoes || "-"}`,
+      `Vacinacao: ${data.vacinas || "-"}`
+    ],
+    data.updated_at || data.created_at
+  );
+  div.dataset.anamneseId = id;
+  if (selectedAnamneseId === id) {
+    div.classList.add("anamnese-item-active");
+  }
+  return div;
+}
+
+function normalizeAnamneseTurma(data) {
+  const turma = String(data?.turma || "").trim();
+  return turma || "Sem turma";
+}
+
+function getAnamneseFilters() {
+  const filtroNome = String(document.getElementById("anaFiltroNome")?.value || "").trim().toLowerCase();
+  const filtroTurma = String(document.getElementById("anaFiltroTurma")?.value || "").trim().toLowerCase();
+  return { filtroNome, filtroTurma };
+}
+
+function populateAnamneseTurmaFilterOptions() {
+  const select = document.getElementById("anaFiltroTurma");
+  if (!select) return;
+  const previous = select.value;
+  const turmaSet = new Set();
+  cachedTurmas.forEach(({ data }) => {
+    const turmaNome = String(data?.nome || "").trim();
+    if (turmaNome) turmaSet.add(turmaNome);
+  });
+  cachedAnamneseRecords.forEach(({ data }) => {
+    turmaSet.add(normalizeAnamneseTurma(data));
+  });
+
+  const turmas = Array.from(turmaSet).filter(Boolean).sort((a, b) => a.localeCompare(b));
+  select.innerHTML = '<option value="">Todas as turmas</option>';
+  turmas.forEach((turma) => {
+    const option = document.createElement("option");
+    option.value = turma;
+    option.textContent = turma;
+    select.appendChild(option);
+  });
+  if (previous && turmas.includes(previous)) {
+    select.value = previous;
+  }
+}
+
+function renderAnamneseList() {
+  const list = document.getElementById("listAnamnese");
+  if (!list) return;
+
+  const rowsBase = cachedAnamneseRecords
+    .slice()
+    .sort((left, right) => {
+      const leftRef = left.data?.updated_at || left.data?.created_at;
+      const rightRef = right.data?.updated_at || right.data?.created_at;
+      const leftTs = leftRef && typeof leftRef.toDate === "function" ? leftRef.toDate().getTime() : 0;
+      const rightTs = rightRef && typeof rightRef.toDate === "function" ? rightRef.toDate().getTime() : 0;
+      return rightTs - leftTs;
+    });
+
+  list.innerHTML = "";
+  if (!rowsBase.length) {
+    list.innerHTML = '<p class="small">Sem registros ainda.</p>';
+    return;
+  }
+
+  if (isFamilyOnlyRole()) {
+    rowsBase.forEach((row) => list.appendChild(renderAnamneseItem(row.id, row.data)));
+    return;
+  }
+
+  const { filtroNome, filtroTurma } = getAnamneseFilters();
+  const rows = rowsBase.filter((row) => {
+    const nome = String(row.data?.nome_aluno || row.data?.aluno || row.data?.dependente || "").trim().toLowerCase();
+    const turma = normalizeAnamneseTurma(row.data).toLowerCase();
+    const matchNome = !filtroNome || nome.includes(filtroNome);
+    const matchTurma = !filtroTurma || turma === filtroTurma;
+    return matchNome && matchTurma;
+  });
+
+  if (!rows.length) {
+    list.innerHTML = '<p class="small">Nenhuma ficha encontrada para os filtros informados.</p>';
+    return;
+  }
+
+  const selectedRow = rows.find((row) => row.id === selectedAnamneseId) || rows[0];
+  if (selectedRow) {
+    loadAnamneseForEdit(selectedRow.id, selectedRow.data || {});
+    applyAnamneseAccessLayout();
+  }
+  const selectedTurma = selectedRow ? normalizeAnamneseTurma(selectedRow.data) : "";
+
+  const groups = new Map();
+  rows.forEach((row) => {
+    const turma = normalizeAnamneseTurma(row.data);
+    if (!groups.has(turma)) groups.set(turma, []);
+    groups.get(turma).push(row);
+  });
+
+  Array.from(groups.keys()).sort((a, b) => a.localeCompare(b)).forEach((turma) => {
+    const wrapper = document.createElement("section");
+    wrapper.className = turma === selectedTurma ? "anamnese-group" : "anamnese-group collapsed";
+
+    const header = document.createElement("button");
+    header.type = "button";
+    header.className = "anamnese-group-header";
+    header.textContent = `Turma: ${turma} (${groups.get(turma).length})`;
+
+    const body = document.createElement("div");
+    body.className = "anamnese-group-body";
+    groups.get(turma).forEach((row) => body.appendChild(renderAnamneseItem(row.id, row.data)));
+
+    wrapper.appendChild(header);
+    wrapper.appendChild(body);
+    list.appendChild(wrapper);
+  });
+}
+
+function getCachedAnamneseById(anamneseId) {
+  return cachedAnamneseRecords.find((row) => row.id === anamneseId) || null;
 }
 
 function currentSchoolId() {
@@ -2665,10 +3263,16 @@ function applyRoleLayout() {
   }
 
   if (familyOnly) {
-    // Esconde todos os grupos do menu lateral exceto o primeiro (COMUNICACAO)
-    const navSections = Array.from(document.querySelectorAll(".sidebar-nav .nav-section"));
-    navSections.forEach((section, index) => {
-      section.style.display = index === 0 ? "" : "none";
+    const allowedSections = new Set(["agenda", "mural", "chat", "galeria", "autorizacoes", "anamnese"]);
+    document.querySelectorAll(".sidebar-nav .nav-section").forEach((section) => {
+      let visibleItems = 0;
+      section.querySelectorAll(".nav-item").forEach((item) => {
+        const sectionName = item.getAttribute("data-section") || "";
+        const allowed = allowedSections.has(sectionName);
+        item.style.display = allowed ? "" : "none";
+        if (allowed) visibleItems += 1;
+      });
+      section.style.display = visibleItems > 0 ? "" : "none";
     });
     // Abre a seção agenda por padrão
     document.querySelectorAll(".nav-item").forEach((item) => item.classList.remove("active"));
@@ -2679,6 +3283,9 @@ function applyRoleLayout() {
     // Restaura todos os grupos do menu lateral
     document.querySelectorAll(".sidebar-nav .nav-section").forEach((section) => {
       section.style.display = "";
+      section.querySelectorAll(".nav-item").forEach((item) => {
+        item.style.display = "";
+      });
     });
 
     // Para staff, manter a secao ativa definida pela navegacao lateral.
@@ -2719,6 +3326,8 @@ function applyRoleLayout() {
       element.style.display = "none";
     }
   });
+
+  applyAnamneseAccessLayout();
 }
 
 function setAgendaMode() {
@@ -3763,6 +4372,99 @@ function attachUiHandlers() {
       }
     });
   }
+  const listAnamnese = document.getElementById("listAnamnese");
+  if (listAnamnese && !listAnamnese.dataset.anamneseBinding) {
+    listAnamnese.dataset.anamneseBinding = "true";
+    listAnamnese.addEventListener("click", async (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const groupHeader = target.closest(".anamnese-group-header");
+      if (groupHeader instanceof HTMLButtonElement) {
+        const wrapper = groupHeader.closest(".anamnese-group");
+        if (wrapper instanceof HTMLElement) {
+          wrapper.classList.toggle("collapsed");
+        }
+        return;
+      }
+
+      const item = target.closest(".item");
+      if (!(item instanceof HTMLElement)) return;
+      const anamneseId = item.dataset.anamneseId || "";
+      if (!anamneseId) return;
+
+      const cached = getCachedAnamneseById(anamneseId);
+      const loadData = async () => {
+        if (cached) return cached.data || {};
+        const snap = await getDoc(doc(db, "fichas_anamnese", anamneseId));
+        return snap.exists() ? snap.data() || {} : null;
+      };
+
+      const editButton = target.closest(".anamnese-edit-btn");
+      if (editButton instanceof HTMLButtonElement) {
+        if (!isFamilyOnlyRole()) {
+          alert("A edicao da anamnese e permitida apenas para o perfil Responsavel.");
+          return;
+        }
+        selectedAnamneseId = anamneseId;
+        const data = await loadData();
+        if (!data) {
+          alert("Anamnese nao encontrada para edicao.");
+          return;
+        }
+        loadAnamneseForEdit(anamneseId, data);
+        renderAnamneseList();
+        return;
+      }
+
+      const viewButton = target.closest(".anamnese-view-btn");
+      if (viewButton instanceof HTMLButtonElement) {
+        selectedAnamneseId = anamneseId;
+        const data = await loadData();
+        if (!data) {
+          alert("Anamnese nao encontrada para visualizacao.");
+          return;
+        }
+        loadAnamneseForEdit(anamneseId, data);
+        applyAnamneseAccessLayout();
+        renderAnamneseList();
+        return;
+      }
+
+      const printButton = target.closest(".anamnese-print-btn");
+      if (printButton instanceof HTMLButtonElement) {
+        selectedAnamneseId = anamneseId;
+        const data = await loadData();
+        if (!data) {
+          alert("Anamnese nao encontrada para impressao.");
+          return;
+        }
+        loadAnamneseForEdit(anamneseId, data);
+        applyAnamneseAccessLayout();
+        renderAnamneseList();
+        printAnamneseForm();
+        return;
+      }
+
+      const deleteButton = target.closest(".anamnese-delete-btn");
+      if (deleteButton instanceof HTMLButtonElement) {
+        await deleteAnamnese(anamneseId);
+      }
+    });
+  }
+  document.getElementById("anaFiltroNome")?.addEventListener("input", () => {
+    renderAnamneseList();
+  });
+  document.getElementById("anaFiltroTurma")?.addEventListener("change", () => {
+    renderAnamneseList();
+  });
+  document.getElementById("btnAnaFiltroLimpar")?.addEventListener("click", () => {
+    const campoNome = document.getElementById("anaFiltroNome");
+    const campoTurma = document.getElementById("anaFiltroTurma");
+    if (campoNome) campoNome.value = "";
+    if (campoTurma) campoTurma.value = "";
+    renderAnamneseList();
+  });
   document.getElementById("matCep")?.addEventListener("blur", async () => {
     const cepField = document.getElementById("matCep");
     if (!cepField) return;
@@ -4063,18 +4765,47 @@ function attachUiHandlers() {
     showOk("okPlan");
   };
 
+  initAnamneseStepper();
+  applyAnamneseAccessLayout();
+
   document.getElementById("btnAnamnese").onclick = async () => {
-    await addDoc(collection(db, "fichas_anamnese"), withSchoolScope({
-      aluno: document.getElementById("anaAluno").value.trim(),
-      alergias: document.getElementById("anaAlergias").value.trim(),
-      restricoes: document.getElementById("anaRestricoes").value.trim(),
-      historico_saude: document.getElementById("anaSaude").value.trim(),
-      created_at: serverTimestamp(),
-      created_by: auth.currentUser.uid
-    }));
-    await audit("create", "fichas_anamnese");
+    if (!isFamilyOnlyRole()) {
+      alert("Somente o perfil Responsavel pode preencher/editar a anamnese.");
+      return;
+    }
+    const payload = withSchoolScope(buildAnamnesePayload());
+    if (editingAnamneseId) {
+      await setDoc(
+        doc(db, "fichas_anamnese", editingAnamneseId),
+        {
+          ...payload,
+          updated_at: serverTimestamp(),
+          updated_by: auth.currentUser.uid
+        },
+        { merge: true }
+      );
+      await audit("update", "fichas_anamnese");
+    } else {
+      await addDoc(collection(db, "fichas_anamnese"), {
+        ...payload,
+        created_at: serverTimestamp(),
+        created_by: auth.currentUser.uid
+      });
+      await audit("create", "fichas_anamnese");
+    }
+    clearAnamneseForm();
+    applyAnamneseAccessLayout();
     showOk("okAna");
   };
+
+  document.getElementById("btnAnamneseCancelar")?.addEventListener("click", () => {
+    clearAnamneseForm();
+    applyAnamneseAccessLayout();
+  });
+
+  document.getElementById("btnAnamnesePrint")?.addEventListener("click", () => {
+    printAnamneseForm();
+  });
 
   document.getElementById("btnOcorrencia").onclick = async () => {
     await addDoc(collection(db, "ocorrencias"), withSchoolScope({
@@ -5042,6 +5773,16 @@ function attachLists() {
     )
   );
 
+  const anamneseQuery = isFamilyOnlyRole()
+    ? scopedCollectionQuery("fichas_anamnese", [where("responsavel_uid", "==", auth.currentUser.uid), limit(500)])
+    : scopedCollectionQuery("fichas_anamnese", [limit(500)]);
+  const offAnamnese = onSnapshot(anamneseQuery, (snap) => {
+    cachedAnamneseRecords = snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() || {} }));
+    populateAnamneseTurmaFilterOptions();
+    renderAnamneseList();
+  });
+  detachListeners.push(offAnamnese);
+
   if (!isFamilyOnlyRole()) {
   attachList("relatorios_bncc", "listRelatoriosBncc", (id, data) => renderBnccReportItem(id, data));
   attachList("planejamento_aulas", "listPlanejamento", (_, data) =>
@@ -5057,13 +5798,6 @@ function attachLists() {
     )
   );
 
-  attachList("fichas_anamnese", "listAnamnese", (_, data) =>
-    renderItem(
-      `Anamnese - ${data.aluno || "aluno"}`,
-      [`Alergias: ${data.alergias || "-"}`, `Restricoes: ${data.restricoes || "-"}`],
-      data.created_at
-    )
-  );
   attachList("ocorrencias", "listOcorrencias", (_, data) =>
     renderItem(`Ocorrencia - ${data.aluno || "aluno"}`, [`Tipo: ${data.tipo || "-"}`, data.descricao || "Sem descricao"], data.created_at)
   );
@@ -5157,6 +5891,7 @@ function attachLists() {
     populateMatriculaTurmaOptions();
     populatePlanTurmaOptions();
     populateProntuarioFiltroOptions();
+    populateAnamneseTurmaFilterOptions();
 
     const list = document.getElementById("listTurmas");
     if (!list) return;
@@ -5275,6 +6010,7 @@ function attachLists() {
     populateLgpdAlunoOptions();
     populateChatTurmaFilterOptions();
     populateChatRecipientOptions();
+    renderAnamneseList();
     updateSuperadminSummary();
   });
   detachListeners.push(offStudentsSummary);

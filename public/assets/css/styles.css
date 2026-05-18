@@ -931,6 +931,164 @@ select.field {
     font-size: 12px;
 }
 
+.anamnese-wizard {
+    border: 1px solid var(--border-dark);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--bg-dark) 88%, var(--bg-card) 12%);
+    padding: 18px;
+}
+
+.anamnese-title {
+    margin: 0;
+    color: var(--heading);
+    font-size: 20px;
+    font-family: "Manrope", "Source Sans 3", sans-serif;
+}
+
+.anamnese-subtitle {
+    margin-top: 4px;
+    margin-bottom: 18px;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.anamnese-steps-container {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--border-dark);
+    padding-bottom: 10px;
+    margin-bottom: 16px;
+}
+
+.anamnese-step-tab {
+    border: 1px solid var(--border-dark);
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.anamnese-step-tab:hover {
+    color: var(--text-strong);
+    border-color: var(--primary-light);
+}
+
+.anamnese-step-tab.active {
+    color: var(--text-strong);
+    border-color: var(--primary-light);
+    background: color-mix(in srgb, var(--primary) 20%, transparent);
+}
+
+.anamnese-form-step {
+    display: none;
+}
+
+.anamnese-form-step.active {
+    display: block;
+}
+
+.anamnese-fieldset {
+    border: 1px solid var(--border-dark);
+    border-radius: 10px;
+    padding: 14px;
+    margin: 0;
+}
+
+.anamnese-legend {
+    color: var(--primary-light);
+    padding: 0 6px;
+    font-weight: 700;
+}
+
+.anamnese-form-group {
+    margin-bottom: 12px;
+}
+
+.anamnese-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.anamnese-buttons-row {
+    margin-top: 12px;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+}
+
+.anamnese-staff-filters {
+    margin-top: 14px;
+    padding: 12px;
+    border: 1px solid var(--border-dark);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bg-dark) 88%, var(--bg-card) 12%);
+}
+
+.anamnese-group {
+    border: 1px solid var(--border-dark);
+    border-radius: 10px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    background: var(--bg-dark);
+}
+
+.anamnese-group-header {
+    width: 100%;
+    text-align: left;
+    border: none;
+    border-bottom: 1px solid var(--border-dark);
+    background: color-mix(in srgb, var(--primary) 15%, transparent);
+    color: var(--text-strong);
+    padding: 10px 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.anamnese-group-header:hover {
+    background: color-mix(in srgb, var(--primary) 24%, transparent);
+}
+
+.anamnese-group-body {
+    padding: 10px;
+}
+
+.anamnese-group.collapsed .anamnese-group-body {
+    display: none;
+}
+
+.anamnese-item-active {
+    border-color: var(--accent-light) !important;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-light) 45%, transparent);
+    background: color-mix(in srgb, var(--bg-card) 75%, var(--accent) 25%);
+}
+
+#btnAnamnese {
+    margin-left: 0;
+}
+
+@media (max-width: 768px) {
+    .anamnese-form-row {
+        grid-template-columns: 1fr;
+    }
+
+    #btnAnamnese {
+        width: 100%;
+    }
+
+    #btnAnaPrev,
+    #btnAnamnesePrint,
+    #btnAnamneseCancelar {
+        width: 100%;
+    }
+}
+
 /* RESPONSIVE */
 @media (max-width: 768px) {
     .sidebar {

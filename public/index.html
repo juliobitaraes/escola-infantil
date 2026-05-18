@@ -383,11 +383,269 @@
                     <section class="card">
                         <div class="card-head" style="background:#217dbb;">Pedagogico - Anamnese</div>
                         <div class="card-body">
-                            <input id="anaAluno" class="field" placeholder="Aluno">
-                            <input id="anaAlergias" class="field" placeholder="Alergias">
-                            <input id="anaRestricoes" class="field" placeholder="Restricoes alimentares">
-                            <textarea id="anaSaude" class="field" rows="2" placeholder="Historico de saude"></textarea>
-                            <button class="btn" id="btnAnamnese">Salvar anamnese</button>
+                            <div id="anamneseWizard" class="anamnese-wizard">
+                                <h3 class="anamnese-title">Ficha de Anamnese Completa</h3>
+                                <div class="anamnese-subtitle">Educacao Infantil • Registro Pedagogico e de Saude</div>
+
+                                <div class="anamnese-steps-container" role="tablist" aria-label="Etapas da anamnese">
+                                    <button type="button" class="anamnese-step-tab active" data-step="0">1. Identificacao</button>
+                                    <button type="button" class="anamnese-step-tab" data-step="1">2. Gestacao &amp; Parto</button>
+                                    <button type="button" class="anamnese-step-tab" data-step="2">3. Desenvolvimento</button>
+                                    <button type="button" class="anamnese-step-tab" data-step="3">4. Saude</button>
+                                    <button type="button" class="anamnese-step-tab" data-step="4">5. Rotina &amp; Familia</button>
+                                </div>
+
+                                <form id="anamneseForm" novalidate>
+                                    <div class="anamnese-form-step active">
+                                        <fieldset class="anamnese-fieldset">
+                                            <legend class="anamnese-legend">1. Identificacao do Aluno e Responsaveis</legend>
+
+                                            <div class="anamnese-form-group">
+                                                <label for="nome_aluno">Nome Completo da Crianca:</label>
+                                                <input type="text" id="nome_aluno" class="field" name="nome_aluno">
+                                            </div>
+
+                                            <div class="anamnese-form-row">
+                                                <div class="anamnese-form-group">
+                                                    <label for="data_nascimento">Data de Nascimento:</label>
+                                                    <input type="date" id="data_nascimento" class="field" name="data_nascimento">
+                                                </div>
+                                                <div class="anamnese-form-group">
+                                                    <label for="genero">Genero:</label>
+                                                    <select id="genero" class="field" name="genero">
+                                                        <option value="">Selecione...</option>
+                                                        <option value="M">Masculino</option>
+                                                        <option value="F">Feminino</option>
+                                                        <option value="O">Outro</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div class="anamnese-form-row">
+                                                <div class="anamnese-form-group">
+                                                    <label for="nome_mae">Nome da Mae/Responsavel 1:</label>
+                                                    <input type="text" id="nome_mae" class="field" name="nome_mae">
+                                                </div>
+                                                <div class="anamnese-form-group">
+                                                    <label for="tel_mae">Telefone da Mae:</label>
+                                                    <input type="tel" id="tel_mae" class="field" name="tel_mae" placeholder="(00) 00000-0000">
+                                                </div>
+                                            </div>
+
+                                            <div class="anamnese-form-row">
+                                                <div class="anamnese-form-group">
+                                                    <label for="nome_pai">Nome do Pai/Responsavel 2:</label>
+                                                    <input type="text" id="nome_pai" class="field" name="nome_pai">
+                                                </div>
+                                                <div class="anamnese-form-group">
+                                                    <label for="tel_pai">Telefone do Pai:</label>
+                                                    <input type="tel" id="tel_pai" class="field" name="tel_pai" placeholder="(00) 00000-0000">
+                                                </div>
+                                            </div>
+                                        </fieldset>
+                                    </div>
+
+                                    <div class="anamnese-form-step">
+                                        <fieldset class="anamnese-fieldset">
+                                            <legend class="anamnese-legend">2. Historico de Gestacao e Nascimento</legend>
+
+                                            <div class="anamnese-form-row">
+                                                <div class="anamnese-form-group">
+                                                    <label for="gestacao_planejada">A gestacao foi planejada?</label>
+                                                    <select id="gestacao_planejada" class="field" name="gestacao_planejada">
+                                                        <option value="sim">Sim</option>
+                                                        <option value="nao">Nao</option>
+                                                    </select>
+                                                </div>
+                                                <div class="anamnese-form-group">
+                                                    <label for="tipo_parto">Tipo de Parto:</label>
+                                                    <select id="tipo_parto" class="field" name="tipo_parto">
+                                                        <option value="normal">Normal</option>
+                                                        <option value="cesarea">Cesarea</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div class="anamnese-form-group">
+                                                <label for="intercorrencias_gravidez">Houve problemas de saude ou emocionais na gravidez?</label>
+                                                <textarea id="intercorrencias_gravidez" class="field" name="intercorrencias_gravidez" rows="3" placeholder="Ex: Pressao alta, diabetes gestacional, repouso..."></textarea>
+                                            </div>
+
+                                            <div class="anamnese-form-row">
+                                                <div class="anamnese-form-group">
+                                                    <label for="tempo_gestacao">Tempo de gestacao (Semanas):</label>
+                                                    <input type="number" id="tempo_gestacao" class="field" name="tempo_gestacao" placeholder="Ex: 39">
+                                                </div>
+                                                <div class="anamnese-form-group">
+                                                    <label for="peso_nascimento">Peso ao nascer (Gramas):</label>
+                                                    <input type="number" id="peso_nascimento" class="field" name="peso_nascimento" placeholder="Ex: 3200">
+                                                </div>
+                                            </div>
+
+                                            <div class="anamnese-form-group">
+                                                <label for="problemas_nascimento">Apresentou complicacoes ao nascer?</label>
+                                                <textarea id="problemas_nascimento" class="field" name="problemas_nascimento" rows="3" placeholder="Ficou na UTI, teve ictericia, precisou de oxigenio?"></textarea>
+                                            </div>
+                                        </fieldset>
+                                    </div>
+
+                                    <div class="anamnese-form-step">
+                                        <fieldset class="anamnese-fieldset">
+                                            <legend class="anamnese-legend">3. Desenvolvimento Motor e Linguagem</legend>
+
+                                            <div class="anamnese-form-row">
+                                                <div class="anamnese-form-group">
+                                                    <label for="idade_sustentou_cabeca">Com que idade sustentou a cabeca?</label>
+                                                    <input type="text" id="idade_sustentou_cabeca" class="field" name="idade_sustentou_cabeca" placeholder="Ex: 3 meses">
+                                                </div>
+                                                <div class="anamnese-form-group">
+                                                    <label for="idade_andou">Com que idade comecou a andar?</label>
+                                                    <input type="text" id="idade_andou" class="field" name="idade_andou" placeholder="Ex: 1 ano e 2 meses">
+                                                </div>
+                                            </div>
+
+                                            <div class="anamnese-form-row">
+                                                <div class="anamnese-form-group">
+                                                    <label for="equilibrio">Cai com frequencia ou demonstra desequilibrio?</label>
+                                                    <select id="equilibrio" class="field" name="equilibrio">
+                                                        <option value="nao">Nao, equilibrio normal</option>
+                                                        <option value="sim">Sim, cai com certa constancia</option>
+                                                    </select>
+                                                </div>
+                                                <div class="anamnese-form-group">
+                                                    <label for="lateralidade">Ja demonstra preferencia por uma das maos?</label>
+                                                    <select id="lateralidade" class="field" name="lateralidade">
+                                                        <option value="indefinido">Ainda nao definiu</option>
+                                                        <option value="destra">Destra (Mao direita)</option>
+                                                        <option value="canhota">Canhota (Mao esquerda)</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div class="anamnese-form-group">
+                                                <label for="desenvolvimento_fala">Como avalia o desenvolvimento da fala?</label>
+                                                <select id="desenvolvimento_fala" class="field" name="desenvolvimento_fala">
+                                                    <option value="clara">Fala de forma clara e compreensivel</option>
+                                                    <option value="trocas">Fala trocando algumas letras</option>
+                                                    <option value="pouca">Usa poucas palavras/Frases curtas</option>
+                                                    <option value="nao_fala">Nao desenvolveu a fala ainda</option>
+                                                </select>
+                                            </div>
+                                        </fieldset>
+                                    </div>
+
+                                    <div class="anamnese-form-step">
+                                        <fieldset class="anamnese-fieldset">
+                                            <legend class="anamnese-legend">4. Historico de Saude Atual</legend>
+
+                                            <div class="anamnese-form-row">
+                                                <div class="anamnese-form-group">
+                                                    <label for="vacinas">A carteira de vacinacao esta em dia?</label>
+                                                    <select id="vacinas" class="field" name="vacinas">
+                                                        <option value="sim">Sim</option>
+                                                        <option value="nao">Nao</option>
+                                                    </select>
+                                                </div>
+                                                <div class="anamnese-form-group">
+                                                    <label for="desfralde">Controle de esfincteres (Desfralde):</label>
+                                                    <select id="desfralde" class="field" name="desfralde">
+                                                        <option value="total">Desfraldado(a) dia e noite</option>
+                                                        <option value="parcial">Desfraldado(a) apenas de dia</option>
+                                                        <option value="processo">Em processo de desfralde</option>
+                                                        <option value="fralda">Usa fralda integralmente</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div class="anamnese-form-group">
+                                                <label for="diagnostico_medico">Possui algum diagnostico clinico ou deficiencia?</label>
+                                                <input type="text" id="diagnostico_medico" class="field" name="diagnostico_medico" placeholder="Ex: TEA, TDAH, Sindrome de Down, Restricao Auditiva">
+                                            </div>
+
+                                            <div class="anamnese-form-group">
+                                                <label for="especialistas">Realiza acompanhamento com algum especialista?</label>
+                                                <input type="text" id="especialistas" class="field" name="especialistas" placeholder="Ex: Fonoaudiologo, Terapeuta Ocupacional, Psicologo...">
+                                            </div>
+
+                                            <div class="anamnese-form-row">
+                                                <div class="anamnese-form-group">
+                                                    <label for="alergias_graves">Possui alguma alergia grave?</label>
+                                                    <input type="text" id="alergias_graves" class="field" name="alergias_graves" placeholder="Medicamentos, picada de inseto, poeira...">
+                                                </div>
+                                                <div class="anamnese-form-group">
+                                                    <label for="restricoes_alimentares">Restricao ou intolerancia alimentar:</label>
+                                                    <input type="text" id="restricoes_alimentares" class="field" name="restricoes_alimentares" placeholder="Ex: Gluten, Lactose, Corantes...">
+                                                </div>
+                                            </div>
+                                        </fieldset>
+                                    </div>
+
+                                    <div class="anamnese-form-step">
+                                        <fieldset class="anamnese-fieldset">
+                                            <legend class="anamnese-legend">5. Rotina, Habitos e Estrutura Familiar</legend>
+
+                                            <div class="anamnese-form-row">
+                                                <div class="anamnese-form-group">
+                                                    <label for="pais_juntos">Os pais residem na mesma casa?</label>
+                                                    <select id="pais_juntos" class="field" name="pais_juntos">
+                                                        <option value="sim">Sim</option>
+                                                        <option value="nao">Nao</option>
+                                                    </select>
+                                                </div>
+                                                <div class="anamnese-form-group">
+                                                    <label for="irmaos">Possui irmaos? Se sim, quantos e idades:</label>
+                                                    <input type="text" id="irmaos" class="field" name="irmaos" placeholder="Ex: 1 irmao de 6 anos">
+                                                </div>
+                                            </div>
+
+                                            <div class="anamnese-form-row">
+                                                <div class="anamnese-form-group">
+                                                    <label for="sono_qualidade">Como e a qualidade do sono noturno?</label>
+                                                    <select id="sono_qualidade" class="field" name="sono_qualidade">
+                                                        <option value="tranquilo">Tranquilo, dorme a noite toda</option>
+                                                        <option value="agitado">Agitado (Acorda muito / Pesadelos)</option>
+                                                        <option value="insonia">Dificuldade inicial para dormir</option>
+                                                    </select>
+                                                </div>
+                                                <div class="anamnese-form-group">
+                                                    <label for="tempo_telas">Tempo diario estimado de uso de telas:</label>
+                                                    <select id="tempo_telas" class="field" name="tempo_telas">
+                                                        <option value="nenhum">Nao utiliza telas</option>
+                                                        <option value="ate_1h">Ate 1 hora por dia</option>
+                                                        <option value="mais_2h">Mais de 2 horas por dia</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div class="anamnese-form-group">
+                                                <label for="comportamento_frustracao">Como a crianca reage ao ser contrariada ou frustrada?</label>
+                                                <textarea id="comportamento_frustracao" class="field" name="comportamento_frustracao" rows="3" placeholder="Chora excessivamente, morde, isola-se, conversa de forma calma..."></textarea>
+                                            </div>
+
+                                            <div class="anamnese-form-group">
+                                                <label for="obs_finais">Observacoes Finais Importantes:</label>
+                                                <textarea id="obs_finais" class="field" name="obs_finais" rows="3" placeholder="Espaco livre para indicar manias, medos especificos da crianca ou outras informacoes importantes."></textarea>
+                                            </div>
+                                        </fieldset>
+                                    </div>
+
+                                    <div class="anamnese-buttons-row">
+                                        <button type="button" class="btn btn-secondary" id="btnAnaPrev">Voltar</button>
+                                        <button type="button" class="btn btn-secondary" id="btnAnamnesePrint">Versao para impressao</button>
+                                        <button type="button" class="btn" id="btnAnamnese">Salvar Anamnese Completa</button>
+                                        <button type="button" class="btn btn-secondary hidden" id="btnAnamneseCancelar">Cancelar edicao</button>
+                                    </div>
+                                </form>
+                            </div>
+                            <div id="anamneseStaffFilters" class="anamnese-staff-filters hidden">
+                                <div class="row">
+                                    <input id="anaFiltroNome" class="field" placeholder="Pesquisar por nome do aluno/dependente">
+                                    <select id="anaFiltroTurma" class="field">
+                                        <option value="">Todas as turmas</option>
+                                    </select>
+                                </div>
+                                <button type="button" class="btn btn-secondary" id="btnAnaFiltroLimpar">Limpar filtros</button>
+                            </div>
                             <p class="ok" id="okAna">Anamnese salva.</p>
                             <div id="listAnamnese" class="list"></div>
                         </div>
@@ -889,7 +1147,7 @@
             superadmin: 21
         };
 
-        const FAMILY_SECTIONS = new Set(['agenda','mural','chat','galeria','autorizacoes']);
+        const FAMILY_SECTIONS = new Set(['agenda','mural','chat','galeria','autorizacoes','anamnese']);
 
         function isFamilyRole() {
             if (typeof window._currentProfileRole === 'string') return window._currentProfileRole === 'responsavel';
