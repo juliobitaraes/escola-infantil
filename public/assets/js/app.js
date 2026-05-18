@@ -82,6 +82,10 @@ let editingBnccReportId = null;
 let editingAnamneseId = null;
 let selectedAnamneseId = null;
 let cachedAnamneseRecords = [];
+let cachedFinanceTransactions = [];
+let editingFinanceId = null;
+let financeSortState = { field: "data", dir: "desc" };
+let reguaChatProcessorTimer = null;
 
 const LGPD_NOTICE_MESSAGE = [
   "Comunicado Importante: Proteção de Imagem dos Nossos Alunos",
@@ -166,11 +170,318 @@ function agendaStatusLabel(value) {
   return AGENDA_STATUS_LABELS[normalizeAgendaStatus(value)];
 }
 
+const REGUA_AUTOMATICA_ETAPAS = [
+  { codigo: "pre_vencimento_3d", label: "3 dias antes do vencimento", offsetDias: -3 },
+  { codigo: "dia_vencimento", label: "No dia do vencimento", offsetDias: 0 },
+  { codigo: "atraso_3d", label: "3 dias em atraso", offsetDias: 3 },
+  { codigo: "atraso_7d", label: "7 dias em atraso", offsetDias: 7 }
+];
+
+const FINANCE_CATEGORIES = {
+  receita: ["Mensalidade", "Matricula", "Material Escolar", "Uniforme", "Colonia de Ferias/Eventos", "Outras Receitas"],
+  despesa: ["Salarios/Professores", "Alimentacao/Cantina", "Manutencao/Limpeza", "Aluguel/Agua/Luz", "Brinquedos/Pedagogico", "Impostos/Contador"]
+};
+
 function setAgendaStatusField(value) {
   const agendaStatus = document.getElementById("agendaStatus");
   if (!agendaStatus) return;
   agendaStatus.value = normalizeAgendaStatus(value);
   agendaStatus.disabled = true;
+}
+
+function formatDateOnlyBr(isoDate) {
+  if (!isoDate) return "-";
+  const [year, month, day] = String(isoDate).split("-").map(Number);
+  if (!year || !month || !day) return String(isoDate);
+  return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`;
+}
+
+function addDaysToIsoDate(isoDate, offsetDays) {
+  const [year, month, day] = String(isoDate || "").split("-").map(Number);
+  if (!year || !month || !day) return "";
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + Number(offsetDays || 0));
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function buildReguaMessage(etapaCodigo, cobrancaData, linkBoleto) {
+  const aluno = String(cobrancaData?.aluno || "familia").trim() || "familia";
+  const valorLabel = money(Number(cobrancaData?.valor || 0));
+  const vencimento = formatDateOnlyBr(cobrancaData?.vencimento || "");
+  const linkLabel = String(linkBoleto || "").trim();
+  const linhaLink = linkLabel
+    ? ` Atualize o boleto aqui: ${linkLabel}`
+    : " Entre em contato com a secretaria para atualizacao do boleto.";
+
+  if (etapaCodigo === "pre_vencimento_3d") {
+    return `Aviso amigavel: a mensalidade de ${aluno}, no valor de ${valorLabel}, vence em ${vencimento}.`;
+  }
+  if (etapaCodigo === "dia_vencimento") {
+    return `Confirmacao de vencimento: hoje e o vencimento da mensalidade de ${aluno} (${valorLabel}).`;
+  }
+  if (etapaCodigo === "atraso_3d") {
+    return `Lembrete: a mensalidade de ${aluno} esta com 3 dias de atraso.${linhaLink}`;
+  }
+  return `Importante: a mensalidade de ${aluno} esta com 7 dias de atraso. Podemos seguir com renegociacao antes do envio para cobranca.${linhaLink}`;
+}
+
+async function gerarReguaAutomaticaParaCobranca({ cobrancaId, canal, linkBoleto }) {
+  const cobrancaSnap = await getDoc(doc(db, "cobrancas", cobrancaId));
+  if (!cobrancaSnap.exists()) {
+    throw new Error("Cobranca nao encontrada para o ID informado.");
+  }
+
+  const cobrancaData = cobrancaSnap.data() || {};
+  const vencimento = String(cobrancaData.vencimento || "").trim();
+  if (!vencimento) {
+    throw new Error("A cobranca selecionada nao possui data de vencimento.");
+  }
+
+  const cobrancaStatus = String(cobrancaData.status || "").trim().toLowerCase();
+  if (cobrancaStatus === "pago") {
+    throw new Error("A cobranca ja esta paga. Nao e necessario gerar regua.");
+  }
+
+  for (const etapa of REGUA_AUTOMATICA_ETAPAS) {
+    const enviarEm = addDaysToIsoDate(vencimento, etapa.offsetDias);
+    const mensagem = buildReguaMessage(etapa.codigo, cobrancaData, linkBoleto);
+    const docId = slugify(`${cobrancaId}-${canal}-${etapa.codigo}`) || `${Date.now()}-${etapa.codigo}`;
+    await setDoc(doc(db, "regua_cobranca", docId), withSchoolScope({
+      cobranca_ref: cobrancaId,
+      aluno: cobrancaData.aluno || "",
+      valor: Number(cobrancaData.valor || 0),
+      vencimento,
+      canal,
+      etapa_codigo: etapa.codigo,
+      etapa_label: etapa.label,
+      mensagem,
+      enviar_em: enviarEm,
+      status: "agendado",
+      updated_at: serverTimestamp(),
+      updated_by: auth.currentUser.uid,
+      created_at: serverTimestamp(),
+      created_by: auth.currentUser.uid
+    }), { merge: true });
+  }
+}
+
+async function resolveReguaChatRecipient(cobrancaData) {
+  const uidDireto = String(cobrancaData?.responsavel_uid || "").trim();
+  if (uidDireto) {
+    return {
+      uid: uidDireto,
+      nome: String(cobrancaData?.responsavel_nome || cobrancaData?.responsavel || uidDireto).trim() || uidDireto
+    };
+  }
+
+  const alunoNome = String(cobrancaData?.aluno || "").trim();
+  if (!alunoNome) return null;
+
+  const alunoSnap = await getDocs(scopedCollectionQuery("alunos", [where("nome", "==", alunoNome), limit(1)]));
+  if (alunoSnap.empty) return null;
+  const alunoData = alunoSnap.docs[0].data() || {};
+  const uid = String(alunoData.responsavel_uid || "").trim();
+  if (!uid) return null;
+
+  return {
+    uid,
+    nome: String(alunoData.responsavel_nome || alunoData.responsavel || uid).trim() || uid
+  };
+}
+
+async function processarReguaAutomaticaNoChat() {
+  if (!auth.currentUser || isFamilyOnlyRole()) return;
+
+  const hojeIso = todayString();
+  const reguaSnap = await getDocs(scopedCollectionQuery("regua_cobranca", [where("status", "==", "agendado"), limit(300)]));
+  if (reguaSnap.empty) return;
+
+  const pendentes = reguaSnap.docs
+    .map((docSnap) => ({ id: docSnap.id, data: docSnap.data() || {} }))
+    .filter((row) => {
+      const enviarEm = String(row.data.enviar_em || "").trim();
+      return Boolean(enviarEm) && enviarEm <= hojeIso;
+    })
+    .sort((a, b) => String(a.data.enviar_em || "").localeCompare(String(b.data.enviar_em || "")));
+
+  for (const row of pendentes) {
+    const reguaRef = doc(db, "regua_cobranca", row.id);
+    const cobrancaRef = String(row.data.cobranca_ref || "").trim();
+    if (!cobrancaRef) {
+      await setDoc(reguaRef, withSchoolScope({
+        status: "erro_sem_cobranca",
+        updated_at: serverTimestamp(),
+        updated_by: auth.currentUser.uid
+      }), { merge: true });
+      continue;
+    }
+
+    const cobrancaSnap = await getDoc(doc(db, "cobrancas", cobrancaRef));
+    if (!cobrancaSnap.exists()) {
+      await setDoc(reguaRef, withSchoolScope({
+        status: "erro_cobranca_nao_encontrada",
+        updated_at: serverTimestamp(),
+        updated_by: auth.currentUser.uid
+      }), { merge: true });
+      continue;
+    }
+
+    const cobrancaData = cobrancaSnap.data() || {};
+    if (String(cobrancaData.status || "").trim().toLowerCase() === "pago") {
+      await setDoc(reguaRef, withSchoolScope({
+        status: "cancelado_pago",
+        updated_at: serverTimestamp(),
+        updated_by: auth.currentUser.uid
+      }), { merge: true });
+      continue;
+    }
+
+    const recipient = await resolveReguaChatRecipient(cobrancaData);
+    if (!recipient?.uid) {
+      await setDoc(reguaRef, withSchoolScope({
+        status: "erro_sem_destinatario",
+        updated_at: serverTimestamp(),
+        updated_by: auth.currentUser.uid
+      }), { merge: true });
+      continue;
+    }
+
+    const chatMessageId = `regua-${row.id}`;
+    const chatRef = doc(db, "chat_mensagens", chatMessageId);
+    const chatSnap = await getDoc(chatRef);
+
+    if (!chatSnap.exists()) {
+      await setDoc(chatRef, withSchoolScope({
+        para: recipient.nome,
+        para_scope: "uid",
+        para_uid: recipient.uid,
+        para_role: null,
+        mensagem: String(row.data.mensagem || "Lembrete financeiro").trim() || "Lembrete financeiro",
+        de_uid: auth.currentUser.uid,
+        de_email: auth.currentUser.email,
+        de_nome: "Sistema Financeiro",
+        de_role: "sistema",
+        read_by: {
+          [auth.currentUser.uid]: new Date().toISOString()
+        },
+        origem: "regua_automatica",
+        origem_ref: row.id,
+        updated_at: serverTimestamp(),
+        created_at: serverTimestamp(),
+        created_by: auth.currentUser.uid
+      }), { merge: true });
+      await audit("create", "chat_mensagens.regua_automatica");
+    }
+
+    await setDoc(reguaRef, withSchoolScope({
+      status: "enviado_chat",
+      chat_message_id: chatMessageId,
+      enviado_em: serverTimestamp(),
+      updated_at: serverTimestamp(),
+      updated_by: auth.currentUser.uid
+    }), { merge: true });
+    await audit("update", "regua_cobranca.enviado_chat");
+  }
+}
+
+function atualizarStatusProcessadorRegua({ tipo = "idle", mensagem = "", ultimaExecucao = null }) {
+  const statusEl = document.getElementById("reguaProcessorStatus");
+  const lastRunEl = document.getElementById("reguaProcessorLastRun");
+
+  if (statusEl) {
+    statusEl.classList.remove("ok", "processing", "error");
+    if (tipo === "ok") statusEl.classList.add("ok");
+    if (tipo === "processing") statusEl.classList.add("processing");
+    if (tipo === "error") statusEl.classList.add("error");
+    statusEl.textContent = mensagem || "Processador automatico: sem status.";
+  }
+
+  if (lastRunEl && ultimaExecucao instanceof Date) {
+    lastRunEl.textContent = `Ultima execucao: ${ultimaExecucao.toLocaleString("pt-BR")}`;
+  }
+}
+
+async function executarProcessadorReguaNoChat() {
+  atualizarStatusProcessadorRegua({
+    tipo: "processing",
+    mensagem: "Processador automatico: executando varredura de disparos..."
+  });
+
+  try {
+    await processarReguaAutomaticaNoChat();
+    atualizarStatusProcessadorRegua({
+      tipo: "ok",
+      mensagem: "Processador automatico: ativo e monitorando cobrancas.",
+      ultimaExecucao: new Date()
+    });
+  } catch (error) {
+    console.error(error);
+    const errorMessage = error instanceof Error ? error.message : "erro inesperado";
+    atualizarStatusProcessadorRegua({
+      tipo: "error",
+      mensagem: `Processador automatico: erro na execucao (${errorMessage}).`,
+      ultimaExecucao: new Date()
+    });
+  }
+}
+
+function iniciarProcessadorReguaNoChat() {
+  if (isFamilyOnlyRole()) {
+    atualizarStatusProcessadorRegua({
+      tipo: "idle",
+      mensagem: "Processador automatico: indisponivel para perfil responsavel."
+    });
+    return;
+  }
+
+  executarProcessadorReguaNoChat();
+
+  if (reguaChatProcessorTimer) {
+    clearInterval(reguaChatProcessorTimer);
+    reguaChatProcessorTimer = null;
+  }
+
+  // Reprocessa periodicamente para nao depender de refresh da pagina.
+  reguaChatProcessorTimer = setInterval(() => {
+    executarProcessadorReguaNoChat();
+  }, 60 * 1000);
+
+  detachListeners.push(() => {
+    if (reguaChatProcessorTimer) {
+      clearInterval(reguaChatProcessorTimer);
+      reguaChatProcessorTimer = null;
+      atualizarStatusProcessadorRegua({
+        tipo: "idle",
+        mensagem: "Processador automatico: pausado."
+      });
+    }
+  });
+}
+
+async function atualizarReguaPorStatusCobranca({ cobrancaId, status, linkBoleto = "" }) {
+  const cobrancaRef = String(cobrancaId || "").trim();
+  if (!cobrancaRef) return;
+
+  const normalizedStatus = String(status || "").trim().toLowerCase();
+  if (normalizedStatus === "pago") {
+    const reguaSnap = await getDocs(scopedCollectionQuery("regua_cobranca", [where("cobranca_ref", "==", cobrancaRef), limit(120)]));
+    for (const docSnap of reguaSnap.docs) {
+      const data = docSnap.data() || {};
+      if (String(data.status || "").trim().toLowerCase() !== "agendado") continue;
+      await setDoc(doc(db, "regua_cobranca", docSnap.id), withSchoolScope({
+        status: "cancelado_pago",
+        updated_at: serverTimestamp(),
+        updated_by: auth.currentUser.uid
+      }), { merge: true });
+    }
+    return;
+  }
+
+  await gerarReguaAutomaticaParaCobranca({
+    cobrancaId: cobrancaRef,
+    canal: "app",
+    linkBoleto: String(linkBoleto || "").trim()
+  });
 }
 
 function initAnamneseStepper() {
@@ -2731,6 +3042,231 @@ function money(n) {
   return Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function financeAdjustCategories() {
+  const tipoSelect = document.getElementById("finTipo");
+  const categoriaSelect = document.getElementById("finCategoria");
+  if (!(tipoSelect instanceof HTMLSelectElement) || !(categoriaSelect instanceof HTMLSelectElement)) return;
+
+  const tipo = tipoSelect.value === "despesa" ? "despesa" : "receita";
+  const previous = categoriaSelect.value;
+  const categorias = FINANCE_CATEGORIES[tipo] || [];
+  categoriaSelect.innerHTML = "";
+  categorias.forEach((categoria) => {
+    const option = document.createElement("option");
+    option.value = categoria;
+    option.textContent = categoria;
+    categoriaSelect.appendChild(option);
+  });
+  if (previous && categorias.includes(previous)) {
+    categoriaSelect.value = previous;
+  }
+}
+
+function financeFormatDate(dateValue) {
+  const value = String(dateValue || "").trim();
+  if (!value) return "-";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-");
+    return `${day}/${month}/${year}`;
+  }
+  return formatDate(value);
+}
+
+function financeNormalizeType(data = {}) {
+  if (String(data.tipo_financeiro || "").trim() === "despesa") return "despesa";
+  if (String(data.tipo_financeiro || "").trim() === "receita") return "receita";
+  const tipoLegacy = String(data.tipo || "").trim().toLowerCase();
+  return tipoLegacy === "pagar" ? "despesa" : "receita";
+}
+
+function financeNormalizeSortValue(row, field) {
+  const data = row?.data || {};
+  if (field === "data") {
+    return String(data.data_lancamento || data.vencimento || "");
+  }
+  if (field === "descricao") {
+    return String(data.descricao || "").toLowerCase();
+  }
+  if (field === "categoria") {
+    return String(data.categoria || "").toLowerCase();
+  }
+  if (field === "tipo") {
+    return financeNormalizeType(data);
+  }
+  if (field === "valor") {
+    return Number(data.valor || 0);
+  }
+  return "";
+}
+
+function financeToggleSort(field) {
+  const normalizedField = ["data", "descricao", "categoria", "tipo", "valor"].includes(field) ? field : "data";
+  if (financeSortState.field === normalizedField) {
+    financeSortState.dir = financeSortState.dir === "asc" ? "desc" : "asc";
+  } else {
+    financeSortState.field = normalizedField;
+    financeSortState.dir = normalizedField === "data" || normalizedField === "valor" ? "desc" : "asc";
+  }
+}
+
+function financeRefreshSortHeaderState() {
+  document.querySelectorAll(".finance-sort-btn").forEach((button) => {
+    if (!(button instanceof HTMLButtonElement)) return;
+    const field = button.getAttribute("data-sort-field") || "";
+    const isActive = field === financeSortState.field;
+    button.classList.toggle("active", isActive);
+    const direction = isActive ? (financeSortState.dir === "asc" ? " ↑" : " ↓") : "";
+    const baseText = button.textContent?.replace(/\s[↑↓]$/, "") || "";
+    button.textContent = `${baseText}${direction}`;
+  });
+}
+
+function setFinanceEditMode(financeId) {
+  editingFinanceId = financeId || null;
+  const launchButton = document.getElementById("btnFinanceLancar");
+  const cancelButton = document.getElementById("btnFinanceCancelar");
+  if (launchButton instanceof HTMLButtonElement) {
+    launchButton.textContent = editingFinanceId ? "Atualizar lancamento" : "Lancar no sistema";
+  }
+  if (cancelButton instanceof HTMLButtonElement) {
+    cancelButton.classList.toggle("hidden", !editingFinanceId);
+  }
+}
+
+function resetFinanceForm() {
+  const tipoField = document.getElementById("finTipo");
+  const descricaoField = document.getElementById("finDescricao");
+  const valorField = document.getElementById("finValor");
+  const dataField = document.getElementById("finData");
+  const metodoField = document.getElementById("finMetodo");
+  const statusField = document.getElementById("finStatus");
+  const recorrenteField = document.getElementById("finRecorrente");
+
+  if (tipoField instanceof HTMLSelectElement) tipoField.value = "receita";
+  financeAdjustCategories();
+  if (descricaoField instanceof HTMLInputElement) descricaoField.value = "";
+  if (valorField instanceof HTMLInputElement) valorField.value = "";
+  if (dataField instanceof HTMLInputElement) dataField.value = todayString();
+  if (metodoField instanceof HTMLSelectElement) metodoField.value = "Boleto";
+  if (statusField instanceof HTMLSelectElement) statusField.value = "pendente";
+  if (recorrenteField instanceof HTMLInputElement) recorrenteField.checked = false;
+  setFinanceEditMode(null);
+}
+
+function applyFinanceSectionMode() {
+  const tipoField = document.getElementById("finTipo");
+  if (tipoField instanceof HTMLSelectElement) {
+    tipoField.disabled = false;
+  }
+
+  const filtroField = document.getElementById("financeFiltroTipo");
+  if (filtroField instanceof HTMLSelectElement) {
+    filtroField.disabled = false;
+  }
+
+  const panelsTitle = document.querySelectorAll(".finance-content-grid .finance-panel h4");
+  if (panelsTitle[0] instanceof HTMLElement) {
+    panelsTitle[0].textContent = "Nova Transacao";
+  }
+  if (panelsTitle[1] instanceof HTMLElement) {
+    panelsTitle[1].textContent = "Historico de Lancamentos";
+  }
+
+  const receitasTitle = document.querySelector(".finance-card.receitas .title");
+  if (receitasTitle instanceof HTMLElement) {
+    receitasTitle.textContent = "Total Receitas";
+  }
+
+  const despesasCard = document.querySelector(".finance-card.despesas");
+  if (despesasCard instanceof HTMLElement) {
+    despesasCard.classList.remove("hidden");
+  }
+
+  const saldoCard = document.querySelector(".finance-card.saldo");
+  if (saldoCard instanceof HTMLElement) {
+    saldoCard.classList.remove("hidden");
+  }
+
+  financeAdjustCategories();
+  renderFinanceDashboardAndTable(cachedFinanceTransactions);
+}
+
+window.applyFinanceSectionMode = applyFinanceSectionMode;
+
+function renderFinanceDashboardAndTable(rows = []) {
+  const rowsForSummary = rows;
+
+  const receitas = rowsForSummary
+    .filter((row) => financeNormalizeType(row.data) === "receita")
+    .reduce((sum, row) => sum + Number(row.data?.valor || 0), 0);
+  const despesas = rowsForSummary
+    .filter((row) => financeNormalizeType(row.data) === "despesa")
+    .reduce((sum, row) => sum + Number(row.data?.valor || 0), 0);
+  const saldo = receitas - despesas;
+
+  const receitasEl = document.getElementById("financeTotalReceitas");
+  const despesasEl = document.getElementById("financeTotalDespesas");
+  const saldoEl = document.getElementById("financeSaldoCaixa");
+  if (receitasEl) receitasEl.textContent = money(receitas);
+  if (despesasEl) despesasEl.textContent = money(despesas);
+  if (saldoEl) {
+    saldoEl.textContent = money(saldo);
+    saldoEl.style.color = saldo >= 0 ? "var(--success)" : "var(--danger)";
+  }
+
+  const tbody = document.getElementById("financeTableBody");
+  if (!(tbody instanceof HTMLElement)) return;
+  const filtroSelecionado = document.getElementById("financeFiltroTipo")?.value || "todos";
+  const filtro = filtroSelecionado;
+  tbody.innerHTML = "";
+
+  const sortedRows = [...rows].sort((a, b) => {
+    const field = financeSortState.field;
+    const dirFactor = financeSortState.dir === "asc" ? 1 : -1;
+    const aValue = financeNormalizeSortValue(a, field);
+    const bValue = financeNormalizeSortValue(b, field);
+    if (typeof aValue === "number" && typeof bValue === "number") {
+      if (aValue !== bValue) return (aValue - bValue) * dirFactor;
+    } else {
+      const compare = String(aValue).localeCompare(String(bValue));
+      if (compare !== 0) return compare * dirFactor;
+    }
+    const aTs = a.data?.created_at?.toMillis?.() || 0;
+    const bTs = b.data?.created_at?.toMillis?.() || 0;
+    return bTs - aTs;
+  });
+
+  let visibleRows = 0;
+  sortedRows.forEach((row) => {
+    const type = financeNormalizeType(row.data);
+    const cobrancaRef = String(row.data?.cobranca_ref || "").trim();
+    if (filtro !== "todos" && filtro !== type) return;
+    visibleRows += 1;
+
+    const tr = document.createElement("tr");
+    const descricao = escapeHtml(String(row.data?.descricao || "-").trim() || "-");
+    const categoria = escapeHtml(String(row.data?.categoria || "-").trim() || "-");
+    const valor = Number(row.data?.valor || 0);
+    const dateLabel = financeFormatDate(row.data?.data_lancamento || row.data?.vencimento || "");
+
+    tr.innerHTML = `
+      <td>${dateLabel}</td>
+      <td><strong>${descricao}</strong>${cobrancaRef ? `<br><small>ID cobranca: ${escapeHtml(cobrancaRef)}</small>` : ""}</td>
+      <td><small>${categoria}</small></td>
+      <td><span class="finance-badge ${type}">${type.toUpperCase()}</span></td>
+      <td style="font-weight:700;color:${type === "receita" ? "var(--success)" : "var(--danger)"};">${type === "receita" ? "+" : "-"} ${money(valor)}</td>
+      <td><button type="button" class="finance-edit-btn" data-finance-id="${escapeHtml(row.id)}">Editar</button><button type="button" class="finance-delete-btn" data-finance-id="${escapeHtml(row.id)}" data-cobranca-ref="${escapeHtml(cobrancaRef)}">Excluir</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  if (!visibleRows) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Nenhum lancamento encontrado.</td></tr>';
+  }
+
+  financeRefreshSortHeaderState();
+}
+
 function todayString() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -4116,6 +4652,10 @@ function attachList(collectionName, containerId, draw, options = {}) {
 function attachUiHandlers() {
   document.getElementById("agendaData").value = todayString();
   document.getElementById("freqData").value = todayString();
+  const financeDateField = document.getElementById("finData");
+  if (financeDateField instanceof HTMLInputElement) {
+    financeDateField.value = todayString();
+  }
   populateDirectorSchoolOptions();
   populateAccUserOptions();
   populateProfessorOptions();
@@ -4130,10 +4670,92 @@ function attachUiHandlers() {
   populateFrequenciaTurmaOptions();
   populateChatTurmaFilterOptions();
   populateChatRecipientOptions();
+  financeAdjustCategories();
+  const activeSection = document.querySelector(".nav-item.active")?.getAttribute("data-section") || "caixa";
+  applyFinanceSectionMode(activeSection);
   renderBnccMatriz();
   renderFrequenciaTurmaTable();
   setAgendaMode();
   applyRoleLayout();
+
+  document.getElementById("finTipo")?.addEventListener("change", () => {
+    financeAdjustCategories();
+  });
+
+  document.getElementById("financeFiltroTipo")?.addEventListener("change", () => {
+    renderFinanceDashboardAndTable(cachedFinanceTransactions);
+  });
+
+  document.querySelectorAll(".finance-sort-btn").forEach((button) => {
+    if (!(button instanceof HTMLButtonElement)) return;
+    if (button.dataset.bound === "true") return;
+    button.dataset.bound = "true";
+    button.addEventListener("click", () => {
+      const field = button.getAttribute("data-sort-field") || "data";
+      financeToggleSort(field);
+      renderFinanceDashboardAndTable(cachedFinanceTransactions);
+    });
+  });
+
+  document.getElementById("btnFinanceCancelar")?.addEventListener("click", () => {
+    resetFinanceForm();
+  });
+
+  const financeTableBody = document.getElementById("financeTableBody");
+  if (financeTableBody && !financeTableBody.dataset.actionBinding) {
+    financeTableBody.dataset.actionBinding = "true";
+    financeTableBody.addEventListener("click", async (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const editButton = target.closest(".finance-edit-btn");
+      if (editButton instanceof HTMLButtonElement) {
+        const financeId = editButton.getAttribute("data-finance-id") || "";
+        const financeRow = cachedFinanceTransactions.find((row) => row.id === financeId);
+        if (!financeRow) return;
+
+        const data = financeRow.data || {};
+        const tipo = financeNormalizeType(data);
+        const tipoField = document.getElementById("finTipo");
+        const descricaoField = document.getElementById("finDescricao");
+        const valorField = document.getElementById("finValor");
+        const dataField = document.getElementById("finData");
+        const metodoField = document.getElementById("finMetodo");
+        const statusField = document.getElementById("finStatus");
+        const recorrenteField = document.getElementById("finRecorrente");
+
+        if (tipoField instanceof HTMLSelectElement) tipoField.value = tipo;
+        financeAdjustCategories();
+        const categoriaField = document.getElementById("finCategoria");
+        if (categoriaField instanceof HTMLSelectElement) categoriaField.value = String(data.categoria || "").trim();
+        if (descricaoField instanceof HTMLInputElement) descricaoField.value = String(data.descricao || "").trim();
+        if (valorField instanceof HTMLInputElement) valorField.value = String(Number(data.valor || 0));
+        if (dataField instanceof HTMLInputElement) dataField.value = String(data.data_lancamento || data.vencimento || "");
+        if (metodoField instanceof HTMLSelectElement) metodoField.value = String(data.metodo || "Boleto");
+        if (statusField instanceof HTMLSelectElement) statusField.value = String(data.status || "pendente");
+        if (recorrenteField instanceof HTMLInputElement) recorrenteField.checked = Boolean(data.recorrente);
+        setFinanceEditMode(financeId);
+        return;
+      }
+
+      const deleteButton = target.closest(".finance-delete-btn");
+      if (!(deleteButton instanceof HTMLButtonElement)) return;
+
+      const financeId = deleteButton.getAttribute("data-finance-id") || "";
+      const cobrancaRef = deleteButton.getAttribute("data-cobranca-ref") || "";
+      if (!financeId) return;
+      if (!confirm("Tem certeza que deseja remover este lancamento do caixa?")) return;
+
+      await deleteDoc(doc(db, "fluxo_caixa", financeId));
+      if (cobrancaRef) {
+        try {
+          await deleteDoc(doc(db, "cobrancas", cobrancaRef));
+        } catch (error) {
+          console.error(error);
+        }
+      }
+      await audit("delete", "fluxo_caixa");
+    });
+  }
 
   document.getElementById("freqTurma")?.addEventListener("change", () => {
     renderFrequenciaTurmaTable();
@@ -5166,60 +5788,153 @@ function attachUiHandlers() {
     }
   };
 
-  document.getElementById("btnCobranca").onclick = async () => {
-    await addDoc(collection(db, "cobrancas"), withSchoolScope({
-      aluno: document.getElementById("cobAluno").value.trim(),
-      valor: Number(document.getElementById("cobValor").value || 0),
-      vencimento: document.getElementById("cobVenc").value,
-      metodo: document.getElementById("cobMetodo").value,
-      status: document.getElementById("cobStatus").value,
-      recorrente: document.getElementById("cobRec").checked,
-      created_at: serverTimestamp(),
-      created_by: auth.currentUser.uid
-    }));
-    await audit("create", "cobrancas");
-    showOk("okCob");
+  document.getElementById("btnFinanceLancar").onclick = async () => {
+    const tipo = document.getElementById("finTipo")?.value === "despesa" ? "despesa" : "receita";
+    const descricao = String(document.getElementById("finDescricao")?.value || "").trim();
+    const categoria = String(document.getElementById("finCategoria")?.value || "").trim();
+    const valor = Number(document.getElementById("finValor")?.value || 0);
+    const dataLancamento = String(document.getElementById("finData")?.value || "").trim();
+
+    if (!descricao) {
+      alert("Informe a descricao/nome do aluno.");
+      return;
+    }
+    if (!categoria) {
+      alert("Selecione a categoria escolar.");
+      return;
+    }
+    if (!(valor > 0)) {
+      alert("Informe um valor maior que zero.");
+      return;
+    }
+    if (!dataLancamento) {
+      alert("Informe a data do lancamento.");
+      return;
+    }
+
+    const recorrente = Boolean(document.getElementById("finRecorrente")?.checked);
+    const metodo = document.getElementById("finMetodo")?.value || "Boleto";
+    const statusReceita = document.getElementById("finStatus")?.value || "pendente";
+    const existingFinance = editingFinanceId ? cachedFinanceTransactions.find((row) => row.id === editingFinanceId) : null;
+    let cobrancaRef = String(existingFinance?.data?.cobranca_ref || "").trim();
+
+    if (tipo === "receita") {
+      if (cobrancaRef) {
+        await setDoc(doc(db, "cobrancas", cobrancaRef), withSchoolScope({
+          aluno: descricao,
+          valor,
+          vencimento: dataLancamento,
+          metodo,
+          status: statusReceita,
+          recorrente,
+          categoria_origem: categoria,
+          updated_at: serverTimestamp(),
+          updated_by: auth.currentUser.uid
+        }), { merge: true });
+        await audit("update", "cobrancas");
+      } else {
+        const cobrancaDoc = await addDoc(collection(db, "cobrancas"), withSchoolScope({
+          aluno: descricao,
+          valor,
+          vencimento: dataLancamento,
+          metodo,
+          status: statusReceita,
+          recorrente,
+          categoria_origem: categoria,
+          created_at: serverTimestamp(),
+          created_by: auth.currentUser.uid
+        }));
+        cobrancaRef = cobrancaDoc.id;
+        await audit("create", "cobrancas");
+      }
+
+      await atualizarReguaPorStatusCobranca({
+        cobrancaId: cobrancaRef,
+        status: statusReceita,
+        linkBoleto: ""
+      });
+      await audit("update", "regua_cobranca.auto_sync");
+    } else if (cobrancaRef) {
+      try {
+        const reguaSnap = await getDocs(scopedCollectionQuery("regua_cobranca", [where("cobranca_ref", "==", cobrancaRef), limit(120)]));
+        for (const docSnap of reguaSnap.docs) {
+          await deleteDoc(doc(db, "regua_cobranca", docSnap.id));
+        }
+        if (!reguaSnap.empty) {
+          await audit("delete", "regua_cobranca.auto_cleanup");
+        }
+        await deleteDoc(doc(db, "cobrancas", cobrancaRef));
+        await audit("delete", "cobrancas");
+      } catch (error) {
+        console.error(error);
+      }
+      cobrancaRef = "";
+    }
+
+    const payload = withSchoolScope({
+      tipo: tipo === "receita" ? "receber" : "pagar",
+      tipo_financeiro: tipo,
+      descricao,
+      categoria,
+      valor,
+      data_lancamento: dataLancamento,
+      vencimento: dataLancamento,
+      numero_nota: "",
+      metodo: tipo === "receita" ? metodo : "",
+      status: tipo === "receita" ? statusReceita : "aberto",
+      cobranca_ref: cobrancaRef || null,
+      recorrente,
+      updated_at: serverTimestamp(),
+      updated_by: auth.currentUser.uid
+    });
+
+    if (editingFinanceId) {
+      await setDoc(doc(db, "fluxo_caixa", editingFinanceId), payload, { merge: true });
+      await audit("update", "fluxo_caixa");
+    } else {
+      await addDoc(collection(db, "fluxo_caixa"), {
+        ...payload,
+        created_at: serverTimestamp(),
+        created_by: auth.currentUser.uid
+      });
+      await audit("create", "fluxo_caixa");
+    }
+
+    resetFinanceForm();
+    showOk("okCaixa");
   };
 
   document.getElementById("btnRegua").onclick = async () => {
-    await addDoc(collection(db, "regua_cobranca"), withSchoolScope({
-      cobranca_ref: document.getElementById("reguaRef").value.trim(),
-      canal: document.getElementById("reguaCanal").value,
-      enviar_em: document.getElementById("reguaData").value,
-      status: "agendado",
-      created_at: serverTimestamp(),
-      created_by: auth.currentUser.uid
-    }));
-    await audit("create", "regua_cobranca");
+    const cobrancaRef = document.getElementById("reguaRef").value.trim();
+    const canal = document.getElementById("reguaCanal").value;
+    const linkBoleto = document.getElementById("reguaLink")?.value.trim() || "";
+
+    if (!cobrancaRef) {
+      alert("Informe o ID da cobranca para gerar a regua automatica.");
+      return;
+    }
+
+    const button = document.getElementById("btnRegua");
+    if (button instanceof HTMLButtonElement) {
+      button.disabled = true;
+      button.textContent = "Gerando regua...";
+    }
+
+    try {
+      await gerarReguaAutomaticaParaCobranca({ cobrancaId: cobrancaRef, canal, linkBoleto });
+      await audit("create", "regua_cobranca.automatica");
+    } catch (error) {
+      console.error(error);
+      alert(error instanceof Error ? error.message : "Nao foi possivel gerar a regua automatica.");
+      return;
+    } finally {
+      if (button instanceof HTMLButtonElement) {
+        button.disabled = false;
+        button.textContent = "Gerar regua automatica";
+      }
+    }
+
     showOk("okRegua");
-  };
-
-  document.getElementById("btnExtra").onclick = async () => {
-    await addDoc(collection(db, "extras_financeiros"), withSchoolScope({
-      aluno: document.getElementById("extAluno").value.trim(),
-      descricao: document.getElementById("extDesc").value.trim(),
-      valor: Number(document.getElementById("extValor").value || 0),
-      competencia: document.getElementById("extComp").value,
-      created_at: serverTimestamp(),
-      created_by: auth.currentUser.uid
-    }));
-    await audit("create", "extras_financeiros");
-    showOk("okExtra");
-  };
-
-  document.getElementById("btnCaixa").onclick = async () => {
-    await addDoc(collection(db, "fluxo_caixa"), withSchoolScope({
-      tipo: document.getElementById("caixaTipo").value,
-      descricao: document.getElementById("caixaDesc").value.trim(),
-      valor: Number(document.getElementById("caixaValor").value || 0),
-      vencimento: document.getElementById("caixaVenc").value,
-      numero_nota: document.getElementById("caixaNota").value.trim(),
-      status: "aberto",
-      created_at: serverTimestamp(),
-      created_by: auth.currentUser.uid
-    }));
-    await audit("create", "fluxo_caixa");
-    showOk("okCaixa");
   };
 
   document.getElementById("btnMatricula").onclick = async () => {
@@ -5544,7 +6259,8 @@ function attachUiHandlers() {
     showOk("okPro");
   };
 
-  document.getElementById("btnAcesso").onclick = async () => {
+  const btnAcesso = document.getElementById("btnAcesso");
+  if (btnAcesso instanceof HTMLButtonElement) btnAcesso.onclick = async () => {
     if (!isSuperUser() && !["superadmin", "admin", "direcao"].includes(currentProfile.role || "")) {
       alert("Somente direcao/admin pode alterar permissoes.");
       return;
@@ -5569,7 +6285,8 @@ function attachUiHandlers() {
     showOk("okAcesso");
   };
 
-  document.getElementById("btnUsuarioCriar").onclick = async () => {
+  const btnUsuarioCriar = document.getElementById("btnUsuarioCriar");
+  if (btnUsuarioCriar instanceof HTMLButtonElement) btnUsuarioCriar.onclick = async () => {
     if (!isSuperUser() && !["superadmin", "admin", "direcao"].includes(currentProfile.role || "")) {
       alert("Somente direcao/admin pode criar usuarios.");
       return;
@@ -5975,6 +6692,10 @@ function attachUiHandlers() {
 }
 
 function attachLists() {
+  if (!isFamilyOnlyRole()) {
+    iniciarProcessadorReguaNoChat();
+  }
+
   const agendaQuery = currentProfile.role === "responsavel"
     ? scopedCollectionQuery("agenda_diaria", [where("responsavel_uid", "==", auth.currentUser.uid), limit(20)])
     : scopedCollectionQuery("agenda_diaria", [limit(40)]);
@@ -6159,35 +6880,19 @@ function attachLists() {
     })()
   );
 
-  attachList("cobrancas", "listCobrancas", (_, data) =>
-    renderItem(
-      `Cobranca - ${data.aluno || "aluno"}`,
-      [`Valor: ${money(data.valor)}`, `Vencimento: ${data.vencimento || "-"}`, `Status: ${data.status || "-"}`],
-      data.created_at
-    )
-  );
   attachList("regua_cobranca", "listRegua", (_, data) =>
     renderItem(
-      `Regua - ref ${data.cobranca_ref || "-"}`,
-      [`Canal: ${data.canal || "-"}`, `Envio: ${data.enviar_em || "-"}`, `Status: ${data.status || "-"}`],
+      `Regua - ${data.etapa_label || "etapa"} | ref ${data.cobranca_ref || "-"}`,
+      [`Canal: ${data.canal || "-"}`, `Envio: ${data.enviar_em || "-"}`, `Status: ${data.status || "-"}`, `Mensagem: ${data.mensagem || "-"}`],
       data.created_at
     )
   );
 
-  attachList("extras_financeiros", "listExtras", (_, data) =>
-    renderItem(
-      `Extra - ${data.aluno || "aluno"}`,
-      [`${data.descricao || "-"}`, `Valor: ${money(data.valor)}`, `Competencia: ${data.competencia || "-"}`],
-      data.created_at
-    )
-  );
-  attachList("fluxo_caixa", "listCaixa", (_, data) =>
-    renderItem(
-      `Caixa - ${data.tipo || "-"}`,
-      [`${data.descricao || "-"}`, `Valor: ${money(data.valor)}`, `Nota: ${data.numero_nota || "-"}`],
-      data.created_at
-    )
-  );
+  const offFluxoFinanceiro = onSnapshot(scopedCollectionQuery("fluxo_caixa", [limit(500)]), (snap) => {
+    cachedFinanceTransactions = snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() || {} }));
+    renderFinanceDashboardAndTable(cachedFinanceTransactions);
+  });
+  detachListeners.push(offFluxoFinanceiro);
 
   attachList("matriculas", "listMatriculas", (id, data) => {
     const item = renderMatriculaItem(data, data.created_at);

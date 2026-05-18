@@ -43,9 +43,7 @@
                 </div>
                 <div class="nav-section">
                     <label class="nav-section-label">FINANCEIRO</label>
-                    <a href="#" class="nav-item" data-section="cobrancas">💰 Cobrancas</a>
                     <a href="#" class="nav-item" data-section="regua">📈 Regua</a>
-                    <a href="#" class="nav-item" data-section="extras">➕ Extras</a>
                     <a href="#" class="nav-item" data-section="caixa">💼 Fluxo Caixa</a>
                 </div>
                 <div class="nav-section">
@@ -686,66 +684,114 @@
                     </section>
 
                     <section class="card">
-                        <div class="card-head" style="background:#27ae60;">Financeiro - Cobrancas</div>
-                        <div class="card-body">
-                            <input id="cobAluno" class="field" placeholder="Aluno">
-                            <div class="row">
-                                <input id="cobValor" class="field" type="number" step="0.01" placeholder="Valor">
-                                <input id="cobVenc" class="field" type="date">
-                            </div>
-                            <div class="row">
-                                <select id="cobMetodo" class="field"><option>Boleto</option><option>Pix</option><option>Cartao</option></select>
-                                <select id="cobStatus" class="field"><option>pendente</option><option>pago</option><option>atrasado</option></select>
-                            </div>
-                            <label><input id="cobRec" type="checkbox"> Cobranca recorrente</label>
-                            <button class="btn" id="btnCobranca" style="display:block;margin-top:10px;">Salvar cobranca</button>
-                            <p class="ok" id="okCob">Cobranca salva.</p>
-                            <div id="listCobrancas" class="list"></div>
-                        </div>
-                    </section>
-
-                    <section class="card">
                         <div class="card-head" style="background:#229753;">Financeiro - Regua</div>
                         <div class="card-body">
+                            <p class="small">Automacao financeira para reduzir inadimplencia. O sistema gera disparos em: 3 dias antes, no vencimento, 3 dias em atraso e 7 dias em atraso.</p>
+                            <div class="regua-processor-box">
+                                <p id="reguaProcessorStatus" class="regua-processor-status">Processador automatico: aguardando inicializacao.</p>
+                                <p id="reguaProcessorLastRun" class="small">Ultima execucao: ainda nao executado.</p>
+                            </div>
                             <div class="row">
                                 <input id="reguaRef" class="field" placeholder="ID da cobranca">
                                 <select id="reguaCanal" class="field"><option>email</option><option>sms</option><option>app</option></select>
                             </div>
-                            <input id="reguaData" class="field" type="date">
-                            <button class="btn" id="btnRegua">Agendar lembrete</button>
+                            <input id="reguaLink" class="field" placeholder="Link para atualizar boleto (opcional)">
+                            <button class="btn" id="btnRegua">Gerar regua automatica</button>
                             <p class="ok" id="okRegua">Lembrete salvo.</p>
                             <div id="listRegua" class="list"></div>
                         </div>
                     </section>
 
                     <section class="card">
-                        <div class="card-head" style="background:#239b56;">Financeiro - Extras</div>
-                        <div class="card-body">
-                            <input id="extAluno" class="field" placeholder="Aluno">
-                            <input id="extDesc" class="field" placeholder="Extra">
-                            <div class="row">
-                                <input id="extValor" class="field" type="number" step="0.01" placeholder="Valor">
-                                <input id="extComp" class="field" type="month">
-                            </div>
-                            <button class="btn" id="btnExtra">Salvar extra</button>
-                            <p class="ok" id="okExtra">Extra salvo.</p>
-                            <div id="listExtras" class="list"></div>
-                        </div>
-                    </section>
-
-                    <section class="card">
                         <div class="card-head" style="background:#1f864b;">Financeiro - Fluxo de Caixa</div>
                         <div class="card-body">
-                            <select id="caixaTipo" class="field"><option>receber</option><option>pagar</option></select>
-                            <input id="caixaDesc" class="field" placeholder="Descricao lancamento">
-                            <div class="row">
-                                <input id="caixaValor" class="field" type="number" step="0.01" placeholder="Valor">
-                                <input id="caixaVenc" class="field" type="date">
+                            <div class="finance-dashboard-cards">
+                                <div class="finance-card receitas">
+                                    <div>
+                                        <div class="title">Total Receitas</div>
+                                        <div class="value" id="financeTotalReceitas">R$ 0,00</div>
+                                    </div>
+                                </div>
+                                <div class="finance-card despesas">
+                                    <div>
+                                        <div class="title">Total Despesas</div>
+                                        <div class="value" id="financeTotalDespesas">R$ 0,00</div>
+                                    </div>
+                                </div>
+                                <div class="finance-card saldo">
+                                    <div>
+                                        <div class="title">Saldo em Caixa</div>
+                                        <div class="value" id="financeSaldoCaixa">R$ 0,00</div>
+                                    </div>
+                                </div>
                             </div>
-                            <input id="caixaNota" class="field" placeholder="Numero da nota fiscal">
-                            <button class="btn" id="btnCaixa">Salvar lancamento</button>
-                            <p class="ok" id="okCaixa">Lancamento salvo.</p>
-                            <div id="listCaixa" class="list"></div>
+
+                            <div class="finance-content-grid">
+                                <div class="finance-panel">
+                                    <h4>Nova Transacao</h4>
+                                    <div class="form-group">
+                                        <label for="finTipo">Tipo de Registro</label>
+                                        <select id="finTipo" class="field">
+                                            <option value="receita">Receita (Entrada)</option>
+                                            <option value="despesa">Despesa (Saida)</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="finDescricao">Descricao / Nome do Aluno</label>
+                                        <input id="finDescricao" class="field" placeholder="Ex: Mensalidade Joao Silva">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="finCategoria">Categoria Escolar</label>
+                                        <select id="finCategoria" class="field"></select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="finValor">Valor (R$)</label>
+                                        <input id="finValor" class="field" type="number" step="0.01" placeholder="0,00">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="finData">Data do Lancamento</label>
+                                        <input id="finData" class="field" type="date">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="finMetodo">Metodo de pagamento (receitas)</label>
+                                        <select id="finMetodo" class="field"><option>Boleto</option><option>Pix</option><option>Cartao</option></select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="finStatus">Status da cobranca (receitas)</label>
+                                        <select id="finStatus" class="field"><option>pendente</option><option>pago</option><option>atrasado</option></select>
+                                    </div>
+                                    <label><input id="finRecorrente" type="checkbox"> Cobranca recorrente</label>
+                                    <button class="btn" id="btnFinanceLancar" style="display:block;margin-top:10px;">Lancar no sistema</button>
+                                    <button class="btn btn-secondary hidden" id="btnFinanceCancelar" type="button" style="display:block;margin-top:10px;">Cancelar edicao</button>
+                                    <p class="ok" id="okCaixa">Lancamento salvo.</p>
+                                </div>
+
+                                <div class="finance-panel">
+                                    <div class="finance-table-head">
+                                        <h4>Historico de Lancamentos</h4>
+                                        <select id="financeFiltroTipo" class="field finance-filter">
+                                            <option value="todos">Todos os registros</option>
+                                            <option value="receita">Apenas receitas</option>
+                                            <option value="despesa">Apenas despesas</option>
+                                        </select>
+                                    </div>
+                                    <div class="finance-table-wrap">
+                                        <table class="finance-table">
+                                            <thead>
+                                                <tr>
+                                                    <th><button type="button" class="finance-sort-btn" data-sort-field="data">Data</button></th>
+                                                    <th><button type="button" class="finance-sort-btn" data-sort-field="descricao">Descricao/Aluno</button></th>
+                                                    <th><button type="button" class="finance-sort-btn" data-sort-field="categoria">Categoria</button></th>
+                                                    <th><button type="button" class="finance-sort-btn" data-sort-field="tipo">Tipo</button></th>
+                                                    <th><button type="button" class="finance-sort-btn" data-sort-field="valor">Valor</button></th>
+                                                    <th>Acoes</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="financeTableBody"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </section>
 
@@ -839,29 +885,10 @@
                     </section>
 
                     <section class="card">
-                        <div class="card-head" style="background:#7d3c98;">Administrativo - Usuarios</div>
+                        <div class="card-head" style="background:#6f3590;">Administrativo - Usuarios</div>
                         <div class="card-body">
-                            <input id="newUserName" class="field" placeholder="Nome do novo usuario">
-                            <input id="newUserEmail" class="field" placeholder="Email do novo usuario">
-                            <input id="newUserPassword" class="field" placeholder="Senha temporaria (opcional)">
-                            <select id="newUserRole" class="field">
-                                <option>professor</option><option>coordenacao</option><option>financeiro</option><option>secretaria</option><option>portaria</option><option>responsavel</option><option>direcao</option><option>admin</option>
-                            </select>
-                            <button class="btn" id="btnUsuarioCriar">Criar usuario</button>
-                            <p class="ok" id="okUsuarioCriado">Usuario criado.</p>
-                            <select id="accUserSelect" class="field">
-                                <option value="">Selecione o usuario</option>
-                            </select>
-                            <input id="accUid" class="field" placeholder="Identificador do usuario (automatico)" readonly>
-                            <input id="accEscola" class="field" placeholder="ID da escola (ex: escola-01)">
-                            <select id="accRole" class="field">
-                                <option>professor</option><option>coordenacao</option><option>financeiro</option><option>secretaria</option><option>portaria</option><option>responsavel</option><option>direcao</option><option>admin</option><option>superadmin</option>
-                            </select>
-                            <button class="btn" id="btnAcesso">Atualizar permissao</button>
-                            <p class="ok" id="okAcesso">Permissao atualizada.</p>
-                            <hr style="margin:16px 0;border:none;border-top:1px solid var(--border,#ddd)">
-                            <p style="font-size:0.85em;color:var(--text-muted,#888);">Cria automaticamente os logins dos responsáveis cadastrados nas matrículas que ainda não possuem acesso.</p>
-                            <button class="btn" id="btnMigrarResponsaveisUsuarios">Criar usuários de responsáveis</button>
+                            <p class="small">Usuarios cadastrados no sistema. Utilize este painel para acompanhamento dos perfis existentes.</p>
+                            <button class="btn" id="btnMigrarResponsaveisUsuarios">Criar usuarios de responsaveis</button>
                             <p class="status" id="statusMigrarResponsaveisUsuarios"></p>
                             <div id="listUsuarios" class="list"></div>
                         </div>
@@ -1111,7 +1138,6 @@
             anamnese: 'Anamnese',
             ocorrencias: 'Ocorrencias',
             frequencia: 'Frequencia',
-            cobrancas: 'Cobrancas',
             regua: 'Regua',
             extras: 'Extras',
             caixa: 'Fluxo de Caixa',
@@ -1136,18 +1162,16 @@
             anamnese: 7,
             ocorrencias: 8,
             frequencia: 9,
-            cobrancas: 10,
-            regua: 11,
-            extras: 12,
-            caixa: 13,
-            matriculas: 14,
-            alunos: 15,
-            prontuarios: 16,
-            usuarios: 17,
-            turmas: 18,
-            portaria: 19,
-            lgpd: 20,
-            superadmin: 21
+            regua: 10,
+            caixa: 11,
+            matriculas: 12,
+            alunos: 13,
+            prontuarios: 14,
+            usuarios: 15,
+            turmas: 16,
+            portaria: 17,
+            lgpd: 18,
+            superadmin: 19
         };
 
         const FAMILY_SECTIONS = new Set(['agenda','mural','chat','galeria','autorizacoes','anamnese']);
@@ -1158,7 +1182,11 @@
         }
 
         function showSection(section) {
-            const allowedSection = (isFamilyRole() && !FAMILY_SECTIONS.has(section)) ? 'agenda' : section;
+            const sectionAliases = {
+                extras: 'caixa'
+            };
+            const normalizedSection = sectionAliases[section] || section;
+            const allowedSection = (isFamilyRole() && !FAMILY_SECTIONS.has(normalizedSection)) ? 'agenda' : normalizedSection;
             const cards = Array.from(document.querySelectorAll('#mainGrid > .card'));
             const cardIndex = cardIndexMap[allowedSection];
             cards.forEach((card, index) => {
@@ -1168,6 +1196,10 @@
             const sectionTitle = document.getElementById('sectionTitle');
             if (sectionTitle) {
                 sectionTitle.textContent = sectionTitles[allowedSection] || 'Modulos';
+            }
+
+            if (typeof window.applyFinanceSectionMode === 'function') {
+                window.applyFinanceSectionMode(allowedSection);
             }
 
             const container = document.querySelector('.container');
