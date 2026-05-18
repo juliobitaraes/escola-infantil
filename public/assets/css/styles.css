@@ -865,6 +865,64 @@ select.field {
     border-radius: 8px;
 }
 
+.freq-table-wrap {
+    overflow-x: auto;
+    margin: 12px 0;
+    border: 1px solid var(--border-dark);
+    border-radius: 8px;
+    padding: 10px;
+    background: color-mix(in srgb, var(--bg-dark) 90%, var(--bg-card) 10%);
+}
+
+.freq-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 760px;
+}
+
+.freq-table th,
+.freq-table td {
+    border-bottom: 1px solid var(--border-dark);
+    padding: 10px;
+    vertical-align: top;
+}
+
+.freq-table th {
+    background: var(--bg-card);
+    color: var(--heading);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.freq-table tr.freq-row-ausente td {
+    background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+
+.freq-presenca-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+}
+
+.freq-file-selected {
+    display: block;
+    margin-top: 6px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.freq-ausencia-row {
+    margin-bottom: 8px;
+}
+
+.freq-doc-actions {
+    display: inline-flex;
+    gap: 8px;
+    margin-left: 8px;
+}
+
 .bncc-actions {
     display: flex;
     flex-wrap: wrap;

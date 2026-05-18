@@ -655,7 +655,9 @@
                         <div class="card-head" style="background:#1f6fa8;">Pedagogico - Ocorrencias</div>
                         <div class="card-body">
                             <div class="row">
-                                <input id="ocoAluno" class="field" placeholder="Aluno">
+                                <select id="ocoAluno" class="field">
+                                    <option value="">Selecione o aluno</option>
+                                </select>
                                 <input id="ocoTipo" class="field" placeholder="Tipo">
                             </div>
                             <textarea id="ocoDescricao" class="field" rows="2" placeholder="Descricao da ocorrencia"></textarea>
@@ -670,11 +672,12 @@
                         <div class="card-body">
                             <div class="row">
                                 <input id="freqData" class="field" type="date">
-                                <input id="freqTurma" class="field" placeholder="Turma">
+                                <select id="freqTurma" class="field">
+                                    <option value="">Selecione a turma</option>
+                                </select>
                             </div>
-                            <div class="row">
-                                <input id="freqAluno" class="field" placeholder="Aluno">
-                                <select id="freqPresente" class="field"><option value="sim">Presente</option><option value="nao">Ausente</option></select>
+                            <div id="freqTurmaTableWrap" class="freq-table-wrap">
+                                <p class="small">Selecione a turma para carregar os alunos e marcar presencas.</p>
                             </div>
                             <button class="btn" id="btnFrequencia">Salvar frequencia</button>
                             <p class="ok" id="okFreq">Frequencia salva.</p>

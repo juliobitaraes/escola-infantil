@@ -1977,6 +1977,157 @@ function populateAgendaAlunoOptions() {
   }
 }
 
+function populateOcorrenciaAlunoOptions() {
+  const alunoSelect = document.getElementById("ocoAluno");
+  if (!(alunoSelect instanceof HTMLSelectElement)) return;
+
+  const previousValue = alunoSelect.value;
+  const alunos = cachedStudents
+    .map(({ data }) => ({
+      nome: data.nome || "",
+      turma: data.turma || ""
+    }))
+    .filter((aluno) => String(aluno.nome).trim())
+    .sort((a, b) => {
+      const byName = String(a.nome).localeCompare(String(b.nome));
+      if (byName !== 0) return byName;
+      return String(a.turma).localeCompare(String(b.turma));
+    });
+
+  alunoSelect.innerHTML = "<option value=\"\">Selecione o aluno</option>";
+  alunos.forEach((aluno) => {
+    const option = document.createElement("option");
+    option.value = aluno.nome;
+    option.textContent = aluno.turma ? `${aluno.nome} - ${aluno.turma}` : aluno.nome;
+    alunoSelect.appendChild(option);
+  });
+
+  if (previousValue && alunos.some((aluno) => aluno.nome === previousValue)) {
+    alunoSelect.value = previousValue;
+  }
+}
+
+function getFrequenciaTurmas() {
+  const fromTurmas = cachedTurmas
+    .map(({ data }) => String(data?.nome || "").trim())
+    .filter(Boolean);
+  const fromStudents = cachedStudents
+    .map(({ data }) => String(data?.turma || "").trim())
+    .filter(Boolean);
+  return Array.from(new Set([...fromTurmas, ...fromStudents]))
+    .sort((a, b) => String(a).localeCompare(String(b)));
+}
+
+function getFrequenciaStudentsByTurma(turmaNome) {
+  const turma = String(turmaNome || "").trim();
+  if (!turma) return [];
+  return cachedStudents
+    .filter(({ data }) => String(data?.turma || "").trim() === turma)
+    .map(({ id, data }) => ({
+      id,
+      nome: String(data?.nome || id || "").trim(),
+      turma: String(data?.turma || "").trim()
+    }))
+    .filter((row) => row.nome)
+    .sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+}
+
+function populateFrequenciaTurmaOptions() {
+  const turmaSelect = document.getElementById("freqTurma");
+  if (!(turmaSelect instanceof HTMLSelectElement)) return;
+
+  const previousValue = turmaSelect.value;
+  const turmas = getFrequenciaTurmas();
+  turmaSelect.innerHTML = "<option value=\"\">Selecione a turma</option>";
+  turmas.forEach((turma) => {
+    const option = document.createElement("option");
+    option.value = turma;
+    option.textContent = turma;
+    turmaSelect.appendChild(option);
+  });
+
+  if (previousValue && turmas.includes(previousValue)) {
+    turmaSelect.value = previousValue;
+  }
+}
+
+function updateFrequenciaRowState(row) {
+  if (!(row instanceof HTMLTableRowElement)) return;
+  const presenteInput = row.querySelector(".freq-presente");
+  const justificativaInput = row.querySelector(".freq-justificativa");
+  const anexoInput = row.querySelector(".freq-anexo");
+  if (!(presenteInput instanceof HTMLInputElement)) return;
+
+  const ausente = !presenteInput.checked;
+  row.classList.toggle("freq-row-ausente", ausente);
+  if (justificativaInput instanceof HTMLTextAreaElement) {
+    justificativaInput.disabled = !ausente;
+    if (!ausente) justificativaInput.value = "";
+  }
+  if (anexoInput instanceof HTMLInputElement) {
+    anexoInput.disabled = !ausente;
+    if (!ausente) anexoInput.value = "";
+  }
+
+  const label = row.querySelector(".freq-file-selected");
+  if (label instanceof HTMLElement && !ausente) {
+    label.textContent = "Nenhum arquivo selecionado.";
+  }
+}
+
+function renderFrequenciaTurmaTable() {
+  const container = document.getElementById("freqTurmaTableWrap");
+  const turmaSelect = document.getElementById("freqTurma");
+  if (!container || !(turmaSelect instanceof HTMLSelectElement)) return;
+
+  const turma = String(turmaSelect.value || "").trim();
+  if (!turma) {
+    container.innerHTML = "<p class=\"small\">Selecione a turma para carregar os alunos e marcar presencas.</p>";
+    return;
+  }
+
+  const alunos = getFrequenciaStudentsByTurma(turma);
+  if (!alunos.length) {
+    container.innerHTML = "<p class=\"small\">Nenhum aluno encontrado para a turma selecionada.</p>";
+    return;
+  }
+
+  const rows = alunos.map((aluno, index) => `
+    <tr data-aluno-id="${escapeHtml(aluno.id)}" data-aluno-nome="${escapeHtml(aluno.nome)}">
+      <td>${index + 1}</td>
+      <td>${escapeHtml(aluno.nome)}</td>
+      <td>
+        <label class="freq-presenca-toggle">
+          <input type="checkbox" class="freq-presente" checked>
+          Presente
+        </label>
+      </td>
+      <td>
+        <textarea class="field freq-justificativa" rows="2" placeholder="Descreva a justificativa da falta" disabled></textarea>
+      </td>
+      <td>
+        <input type="file" class="field freq-anexo" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" disabled>
+        <small class="freq-file-selected">Nenhum arquivo selecionado.</small>
+      </td>
+    </tr>
+  `).join("");
+
+  container.innerHTML = `
+    <table class="freq-table" aria-label="Tabela de frequencia da turma ${escapeHtml(turma)}">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Aluno</th>
+          <th>Presenca</th>
+          <th>Justificativa de falta</th>
+          <th>Arquivo de justificativa</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
 function resolveMatriculaIdForAluno(alunoEntry, alunoNome) {
   const matriculaId = alunoEntry?.data?.matricula_id || "";
   if (matriculaId) return matriculaId;
@@ -3616,6 +3767,53 @@ function renderItem(entryTitle, lines, dateValue) {
   return div;
 }
 
+function renderFrequenciaAusencias(registros) {
+  const ausentes = (Array.isArray(registros) ? registros : []).filter((registro) => !registro?.presente);
+  if (!ausentes.length) {
+    return "Nenhuma ausencia no dia.";
+  }
+
+  const anexos = ausentes
+    .map((registro) => {
+      const doc = registro?.documento_justificativa && typeof registro.documento_justificativa === "object"
+        ? registro.documento_justificativa
+        : null;
+      const url = String(doc?.url || "").trim();
+      if (!url) return null;
+      const nomeArquivo = String(doc?.nome || `justificativa-${String(registro?.aluno_id || "aluno").trim() || "aluno"}`).trim();
+      return {
+        url,
+        fileName: nomeArquivo || "justificativa-falta"
+      };
+    })
+    .filter(Boolean);
+
+  const anexosPayload = anexos.length
+    ? escapeHtml(encodeURIComponent(JSON.stringify(anexos)))
+    : "";
+  const botaoBaixarTodos = anexos.length
+    ? `<div class="saved-doc-all-row"><button type="button" class="doc-download-all-btn" data-files="${anexosPayload}">Baixar todos os anexos de justificativa</button></div>`
+    : "";
+
+  const linhasAusentes = ausentes
+    .map((registro) => {
+      const alunoNome = escapeHtml(String(registro?.aluno || "Aluno").trim() || "Aluno");
+      const justificativa = escapeHtml(String(registro?.justificativa || "Sem justificativa").trim() || "Sem justificativa");
+      const doc = registro?.documento_justificativa && typeof registro.documento_justificativa === "object"
+        ? registro.documento_justificativa
+        : null;
+      const url = String(doc?.url || "").trim();
+      const nomeArquivo = String(doc?.nome || `justificativa-${String(registro?.aluno_id || "aluno").trim() || "aluno"}`).trim();
+      const actions = url
+        ? `<span class=\"freq-doc-actions\"><button type=\"button\" class=\"doc-view-btn\" data-url=\"${escapeHtml(url)}\" data-filename=\"${escapeHtml(nomeArquivo)}\">Visualizar</button><button type=\"button\" class=\"doc-download-btn\" data-url=\"${escapeHtml(url)}\" data-filename=\"${escapeHtml(nomeArquivo)}\">Baixar</button></span>`
+        : "<span class=\"small\">Sem anexo</span>";
+      return `<div class=\"freq-ausencia-row\"><strong>${alunoNome}</strong>: ${justificativa} ${actions}</div>`;
+    })
+    .join("");
+
+  return `${linhasAusentes}${botaoBaixarTodos}`;
+}
+
 function renderMatriculaItem(data, dateValue) {
   const div = document.createElement("div");
   div.className = "item item-matricula collapsed";
@@ -3917,6 +4115,7 @@ function attachList(collectionName, containerId, draw, options = {}) {
 
 function attachUiHandlers() {
   document.getElementById("agendaData").value = todayString();
+  document.getElementById("freqData").value = todayString();
   populateDirectorSchoolOptions();
   populateAccUserOptions();
   populateProfessorOptions();
@@ -3927,11 +4126,40 @@ function attachUiHandlers() {
   populateProntuarioFiltroOptions();
   populateLgpdAlunoOptions();
   populateBnccAlunoOptions();
+  populateOcorrenciaAlunoOptions();
+  populateFrequenciaTurmaOptions();
   populateChatTurmaFilterOptions();
   populateChatRecipientOptions();
   renderBnccMatriz();
+  renderFrequenciaTurmaTable();
   setAgendaMode();
   applyRoleLayout();
+
+  document.getElementById("freqTurma")?.addEventListener("change", () => {
+    renderFrequenciaTurmaTable();
+  });
+
+  document.getElementById("freqTurmaTableWrap")?.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+
+    if (target.classList.contains("freq-presente")) {
+      const row = target.closest("tr");
+      if (row instanceof HTMLTableRowElement) {
+        updateFrequenciaRowState(row);
+      }
+      return;
+    }
+
+    if (target.classList.contains("freq-anexo") && target instanceof HTMLInputElement) {
+      const row = target.closest("tr");
+      if (!(row instanceof HTMLTableRowElement)) return;
+      const label = row.querySelector(".freq-file-selected");
+      if (!(label instanceof HTMLElement)) return;
+      const file = target.files && target.files[0] ? target.files[0] : null;
+      label.textContent = file ? file.name : "Nenhum arquivo selecionado.";
+    }
+  });
 
   document.getElementById("btnBuscarCep")?.addEventListener("click", async () => {
     await buscarEnderecoPorCep();
@@ -4138,6 +4366,44 @@ function attachUiHandlers() {
         openUrlInNewTab(url, fileName);
         return;
       }
+      const downloadButton = target.closest(".doc-download-btn");
+      if (!(downloadButton instanceof HTMLElement)) return;
+      const url = downloadButton.getAttribute("data-url") || "";
+      const fileName = downloadButton.getAttribute("data-filename") || "documento";
+      await triggerDocumentDownload(url, fileName);
+    });
+  }
+  const listFrequencia = document.getElementById("listFrequencia");
+  if (listFrequencia && !listFrequencia.dataset.downloadBinding) {
+    listFrequencia.dataset.downloadBinding = "true";
+    listFrequencia.addEventListener("click", async (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const allButton = target.closest(".doc-download-all-btn");
+      if (allButton instanceof HTMLElement) {
+        const filesRaw = allButton.getAttribute("data-files") || "";
+        try {
+          const files = JSON.parse(decodeURIComponent(filesRaw));
+          if (!Array.isArray(files) || files.length === 0) return;
+          for (const file of files) {
+            await triggerDocumentDownload(String(file?.url || ""), String(file?.fileName || "documento"));
+          }
+        } catch (error) {
+          console.error(error);
+          alert("Nao foi possivel baixar todos os anexos de justificativa.");
+        }
+        return;
+      }
+
+      const viewButton = target.closest(".doc-view-btn");
+      if (viewButton instanceof HTMLElement) {
+        const url = viewButton.getAttribute("data-url") || "";
+        const fileName = viewButton.getAttribute("data-filename") || getFileNameFromUrl(url);
+        openUrlInNewTab(url, fileName);
+        return;
+      }
+
       const downloadButton = target.closest(".doc-download-btn");
       if (!(downloadButton instanceof HTMLElement)) return;
       const url = downloadButton.getAttribute("data-url") || "";
@@ -4820,16 +5086,84 @@ function attachUiHandlers() {
   };
 
   document.getElementById("btnFrequencia").onclick = async () => {
-    await addDoc(collection(db, "frequencia"), withSchoolScope({
-      data: document.getElementById("freqData").value,
-      turma: document.getElementById("freqTurma").value.trim(),
-      aluno: document.getElementById("freqAluno").value.trim(),
-      presente: document.getElementById("freqPresente").value === "sim",
-      created_at: serverTimestamp(),
-      created_by: auth.currentUser.uid
-    }));
-    await audit("create", "frequencia");
-    showOk("okFreq");
+    const turma = String(document.getElementById("freqTurma")?.value || "").trim();
+    const dataFrequencia = String(document.getElementById("freqData")?.value || "").trim();
+    if (!turma) {
+      alert("Selecione a turma para salvar a frequencia.");
+      return;
+    }
+    if (!dataFrequencia) {
+      alert("Informe a data da frequencia.");
+      return;
+    }
+
+    const rows = Array.from(document.querySelectorAll("#freqTurmaTableWrap tbody tr[data-aluno-id]"));
+    if (!rows.length) {
+      alert("Nenhum aluno encontrado para salvar frequencia nesta turma.");
+      return;
+    }
+
+    const button = document.getElementById("btnFrequencia");
+    if (button instanceof HTMLButtonElement) {
+      button.disabled = true;
+      button.textContent = "Salvando frequencia...";
+    }
+
+    const registros = [];
+    const folderDataSegment = dataFrequencia.replace(/-/g, "");
+    try {
+      for (const row of rows) {
+        if (!(row instanceof HTMLTableRowElement)) continue;
+        const alunoId = String(row.dataset.alunoId || "").trim();
+        const alunoNome = String(row.dataset.alunoNome || "").trim();
+        const presenteInput = row.querySelector(".freq-presente");
+        const justificativaInput = row.querySelector(".freq-justificativa");
+        const anexoInput = row.querySelector(".freq-anexo");
+        const presente = presenteInput instanceof HTMLInputElement ? presenteInput.checked : true;
+        const justificativa = justificativaInput instanceof HTMLTextAreaElement ? String(justificativaInput.value || "").trim() : "";
+        const arquivo = anexoInput instanceof HTMLInputElement && anexoInput.files && anexoInput.files[0] ? anexoInput.files[0] : null;
+
+        let documentoJustificativa = null;
+        if (!presente && arquivo) {
+          documentoJustificativa = await uploadMatriculaFile(arquivo, {
+            alunoSlug: slugify(alunoNome || alunoId || "aluno"),
+            folder: `frequencia-${folderDataSegment}`
+          });
+        }
+
+        registros.push({
+          aluno_id: alunoId,
+          aluno: alunoNome,
+          presente,
+          justificativa: presente ? "" : justificativa,
+          documento_justificativa: presente ? null : documentoJustificativa,
+          documentos_upload: presente || !documentoJustificativa ? [] : [documentoJustificativa]
+        });
+      }
+
+      const totalAlunos = registros.length;
+      const presentes = registros.filter((registro) => registro.presente).length;
+      const ausentes = totalAlunos - presentes;
+
+      await addDoc(collection(db, "frequencia"), withSchoolScope({
+        data: dataFrequencia,
+        turma,
+        total_alunos: totalAlunos,
+        presentes,
+        ausentes,
+        registros,
+        created_at: serverTimestamp(),
+        created_by: auth.currentUser.uid
+      }));
+      await audit("create", "frequencia");
+      showOk("okFreq");
+      renderFrequenciaTurmaTable();
+    } finally {
+      if (button instanceof HTMLButtonElement) {
+        button.disabled = false;
+        button.textContent = "Salvar frequencia";
+      }
+    }
   };
 
   document.getElementById("btnCobranca").onclick = async () => {
@@ -5802,7 +6136,27 @@ function attachLists() {
     renderItem(`Ocorrencia - ${data.aluno || "aluno"}`, [`Tipo: ${data.tipo || "-"}`, data.descricao || "Sem descricao"], data.created_at)
   );
   attachList("frequencia", "listFrequencia", (_, data) =>
-    renderItem(`Frequencia - ${data.aluno || "aluno"}`, [`Data: ${data.data || "-"}`, `Presente: ${data.presente ? "sim" : "nao"}`], data.created_at)
+    (() => {
+      if (Array.isArray(data.registros) && data.registros.length) {
+        const total = Number(data.total_alunos || data.registros.length || 0);
+        const presentes = Number(data.presentes || data.registros.filter((registro) => Boolean(registro?.presente)).length || 0);
+        const ausentes = Number(data.ausentes || Math.max(0, total - presentes));
+        const anexosJustificativa = data.registros.filter((registro) => {
+          const doc = registro?.documento_justificativa;
+          return Boolean(doc && typeof doc === "object" && String(doc.url || "").trim());
+        }).length;
+        const detalhes = [
+          `Data: ${data.data || "-"}`,
+          `Presencas: ${presentes}/${total}`,
+          `Ausencias: ${ausentes}`,
+          `Anexos de justificativa: ${anexosJustificativa}`,
+          renderFrequenciaAusencias(data.registros)
+        ];
+        return renderItem(`Frequencia - ${data.turma || "turma"}`, detalhes, data.created_at);
+      }
+
+      return renderItem(`Frequencia - ${data.aluno || "aluno"}`, [`Data: ${data.data || "-"}`, `Presente: ${data.presente ? "sim" : "nao"}`], data.created_at);
+    })()
   );
 
   attachList("cobrancas", "listCobrancas", (_, data) =>
@@ -5890,6 +6244,8 @@ function attachLists() {
     cachedTurmas = snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }));
     populateMatriculaTurmaOptions();
     populatePlanTurmaOptions();
+    populateFrequenciaTurmaOptions();
+    renderFrequenciaTurmaTable();
     populateProntuarioFiltroOptions();
     populateAnamneseTurmaFilterOptions();
 
@@ -6006,6 +6362,9 @@ function attachLists() {
     populateAgendaAlunoOptions();
     populateGaleriaAlunoOptions();
     populateBnccAlunoOptions();
+    populateOcorrenciaAlunoOptions();
+    populateFrequenciaTurmaOptions();
+    renderFrequenciaTurmaTable();
     populateProntuarioAlunoOptions();
     populateLgpdAlunoOptions();
     populateChatTurmaFilterOptions();
